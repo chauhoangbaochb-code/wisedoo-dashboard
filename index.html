@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WisEdoo Registration Dashboard</title>
+  <link rel="icon" href="assets/logo-full-color.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-in">
+      <img class="logo" src="assets/logo-full-white.png" alt="WisEdoo">
+      <div class="tb-title">
+        <h1>Dashboard đăng ký sự kiện</h1>
+        <p id="subtitle">Theo dõi học viên đăng ký theo thời gian thực</p>
+      </div>
+      <div class="live" id="live">
+        <span class="dot"></span>
+        <span id="lastUpdated">Đang tải dữ liệu…</span>
+        <button class="btn-ghost" id="refreshBtn" type="button">Làm mới</button>
+      </div>
+    </div>
+    <nav class="wrap tabs" id="tabs" aria-label="Chọn sự kiện"></nav>
+  </header>
+
+  <main class="wrap">
+    <div class="filters" id="filters"></div>
+    <div id="view"><div class="state"><h2>Đang tải dữ liệu từ Google Sheet…</h2></div></div>
+  </main>
+
+  <footer>WisEdoo · Thực học – Thực hành · Dữ liệu cập nhật từ Google Sheet, không lưu trữ ở nơi khác. Không hiển thị tên, email, SĐT.</footer>
+
+  <div id="tooltip" class="tooltip" hidden></div>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
