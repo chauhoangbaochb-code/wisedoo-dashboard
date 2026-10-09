@@ -212,7 +212,7 @@ button, select, input { font: inherit; color: inherit; }
 /* ---------- Word cloud ---------- */
 .cloud { display: flex; flex-wrap: wrap; gap: 8px 8px; align-items: center; justify-content: center; padding: 8px 0; min-height: 120px; }
 .cloud .kw { --kc: var(--brand); display: inline-flex; align-items: center; gap: .4em; cursor: pointer; font-weight: 700; line-height: 1.2;
-  color: var(--text); background: color-mix(in srgb, var(--kc) 13%, var(--surface)); border: 1px solid color-mix(in srgb, var(--kc) 32%, transparent);
+  color: var(--text); background: color-mix(in srgb, var(--kc) 20%, var(--surface)); border: 1px solid color-mix(in srgb, var(--kc) 45%, transparent);
   border-radius: 999px; padding: .22em .7em; transition: transform .12s ease, box-shadow .12s ease; }
 .cloud .kw i { width: .45em; height: .45em; min-width: 7px; min-height: 7px; border-radius: 50%; background: var(--kc); }
 .cloud .kw:hover { transform: translateY(-1px); box-shadow: 0 2px 8px color-mix(in srgb, var(--kc) 25%, transparent); }
