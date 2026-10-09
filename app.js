@@ -111,6 +111,7 @@
     const ids = CFG.themes.filter(th => th.keywords.some(k => t.includes(k))).map(th => th.id);
     return ids.length ? ids : ['other'];
   }
+  const themeColor = id => { const i = CFG.themes.findIndex(t => t.id === id); return i >= 0 && i < 8 ? `--c${i + 1}` : '--c-other'; };
   const themeLabel = id => (id === 'other' ? 'Khác / chưa phân loại' : (CFG.themes.find(t => t.id === id) || {}).label || id);
 
   function cohortOf(y) {
@@ -831,17 +832,30 @@
     const colItems = toItems(countBy(withQ, dim.fn), dim.order).map(i => ({ label: i.label }));
     const mx = matrix(themeItems.map(i => ({ label: i.label, key: i.key })), colItems,
       (th, col) => withQ.filter(r => r.themes.includes(th) && (dim.fn(r) || UNKNOWN) === col).length, { rowClick: 'theme-id' });
-    const words = keywords(rows);
-    const maxW = Math.max(1, ...words.map(w => w.value));
-    const ramp = ['--seq-3', '--seq-4', '--seq-5', '--seq-6'];
-    const cloud = words.length ? `<div class="cloud">${words.map(w => {
-      const t = w.value / maxW;
-      return `<button type="button" data-word="${esc(w.word)}" class="${state.q.word === w.word ? 'selected' : ''}" style="font-size:${(13 + t * 22).toFixed(1)}px;color:var(${ramp[Math.min(3, Math.floor(t * 4))]})" data-tip="“${esc(w.word)}” xuất hiện trong ${w.value} câu hỏi · bấm để lọc">${esc(w.word)}</button>`;
-    }).join('')}</div>` : '<div class="empty">Chưa đủ câu hỏi để trích từ khoá</div>';
+    // Màu theo nhóm vấn đề — cùng màu với biểu đồ "Nhóm vấn đề" để đọc chéo
+    const words = keywords(rows).map(w => {
+      const counts = {};
+      for (const r of withQ) {
+        const hit = r.aiKeywords.length ? r.aiKeywords.includes(w.word) : r.question.toLowerCase().includes(w.word);
+        if (hit) r.themes.forEach(t => (counts[t] = (counts[t] || 0) + 1));
+      }
+      const theme = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || (a === 'other') - (b === 'other'))[0] || 'other';
+      return { ...w, theme };
+    });
+    const vals = words.map(w => w.value);
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const sizeOf = v => (hi > lo ? 14 + 18 * Math.sqrt((v - lo) / (hi - lo)) : 17);
+    // từ lớn ở giữa, nhỏ dần ra hai bên
+    const arranged = [];
+    words.forEach((w, i) => (i % 2 ? arranged.push(w) : arranged.unshift(w)));
+    const cloud = words.length ? `<div class="cloud">${arranged.map(w => `<button type="button" data-word="${esc(w.word)}"
+        class="kw${state.q.word === w.word ? ' selected' : ''}" style="--kc:var(${themeColor(w.theme)});font-size:${sizeOf(w.value).toFixed(1)}px"
+        data-tip="“${esc(w.word)}” · ${w.value} câu hỏi · nhóm: ${esc(themeLabel(w.theme))} · bấm để lọc"><i></i>${esc(w.word)}</button>`).join('')}</div>`
+      : '<div class="empty">Chưa đủ câu hỏi để trích từ khoá</div>';
 
     const body = `<div class="grid g2">
-      ${card('Nhóm vấn đề họ đang gặp', `${how} · ${withQ.length}/${rows.length} người có câu hỏi cụ thể · một câu có thể thuộc nhiều nhóm · bấm để xem câu hỏi`, barList(themeItems, { total: withQ.length, click: 'theme-id', selected: state.q.theme, limit: 20 }))}
-      ${card('Từ khoá nổi bật', `${nAi ? 'Từ khoá do AI rút ra từ từng câu hỏi' : 'Cụm từ xuất hiện nhiều nhất trong câu hỏi'} · cỡ chữ = số câu hỏi nhắc tới · bấm để lọc`, cloud)}
+      ${card('Nhóm vấn đề họ đang gặp', `${how} · ${withQ.length}/${rows.length} người có câu hỏi cụ thể · một câu có thể thuộc nhiều nhóm · bấm để xem câu hỏi`, barList(themeItems, { total: withQ.length, click: 'theme-id', selected: state.q.theme, limit: 20, colorFn: i => themeColor(i.key) }))}
+      ${card('Từ khoá nổi bật', `${nAi ? 'Từ khoá do AI rút ra từ từng câu hỏi' : 'Cụm từ xuất hiện nhiều nhất trong câu hỏi'} · màu = nhóm vấn đề (như biểu đồ bên cạnh) · cỡ chữ = số câu hỏi nhắc tới · bấm để lọc`, cloud)}
       <div class="card span2"><div class="card-head"><div><h3>Vấn đề × ${esc(dim.label)}</h3><p class="hint">Mỗi nhóm người lo lắng điều gì khác nhau? Bấm tên vấn đề để xem câu hỏi.</p></div>
         <label class="hint" style="margin:0">Xem theo&nbsp;<select data-matrix>${Object.entries(dims).map(([k, d]) => `<option value="${k}"${k === state.matrixDim ? ' selected' : ''}>${d.label}</option>`).join('')}</select></label></div>${mx}</div>
       <div class="card span2" id="questions">${questionsBlock(rows)}</div>
