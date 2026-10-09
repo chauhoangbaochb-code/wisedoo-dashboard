@@ -105,7 +105,12 @@ button, select, input { font: inherit; color: inherit; }
 .tabs .count { display: inline-block; margin-left: 6px; font-size: 12px; background: rgba(255,255,255,.18); border-radius: 999px; padding: 0 7px; }
 
 /* ---------- Filters ---------- */
-.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 18px 0 6px; }
+.filters { padding: 18px 0 6px; }
+.fbox > summary { display: none; }
+.frow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.more-box > summary { display: none; }
+.more { display: block; margin: 14px auto 0; background: var(--brand-50); color: var(--brand); border: 1px solid var(--brand-100); border-radius: 999px; padding: 8px 18px; font-weight: 700; cursor: pointer; }
+.more:hover { background: var(--brand-100); }
 .filters label { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; flex-direction: column; gap: 2px; }
 .filters select { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; min-width: 150px; font-weight: 600; font-size: 14px; }
 .filters .reset { align-self: flex-end; background: none; border: none; color: var(--brand); font-weight: 700; cursor: pointer; padding: 6px 4px; }
@@ -195,6 +200,7 @@ button, select, input { font: inherit; color: inherit; }
 /* ---------- Heatmap / matrix ---------- */
 .heat-wrap { overflow-x: auto; }
 .heat { display: grid; grid-template-columns: 34px repeat(24, minmax(16px, 1fr)); gap: 2px; min-width: 520px; }
+.heat.heat-bin { min-width: 0; }
 .heat .hl { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; font-weight: 600; }
 .heat .hh { font-size: 10.5px; color: var(--faint); text-align: center; }
 .heat .cell { aspect-ratio: 1 / 1; border-radius: 3px; background: var(--seq-0); }
@@ -211,7 +217,7 @@ button, select, input { font: inherit; color: inherit; }
 
 /* ---------- Word cloud ---------- */
 .cloud { display: flex; flex-wrap: wrap; gap: 8px 8px; align-items: center; justify-content: center; padding: 8px 0; min-height: 120px; }
-.cloud .kw { --kc: var(--brand); display: inline-flex; align-items: center; gap: .4em; cursor: pointer; font-weight: 700; line-height: 1.2;
+.cloud .kw { --kc: var(--brand); --fs: 17px; font-size: var(--fs); white-space: nowrap; display: inline-flex; align-items: center; gap: .4em; cursor: pointer; font-weight: 700; line-height: 1.2;
   color: var(--text); background: color-mix(in srgb, var(--kc) 20%, var(--surface)); border: 1px solid color-mix(in srgb, var(--kc) 45%, transparent);
   border-radius: 999px; padding: .22em .7em; transition: transform .12s ease, box-shadow .12s ease; }
 .cloud .kw i { width: .45em; height: .45em; min-width: 7px; min-height: 7px; border-radius: 50%; background: var(--kc); }
@@ -280,4 +286,62 @@ footer { color: var(--faint); font-size: 12.5px; text-align: center; padding: 36
   .filters select { min-width: 0; width: 100%; }
   .filters label { flex: 1 1 140px; }
   .kpi .k-value { font-size: 26px; }
+}
+
+/* ---------- Mobile (≤ 640px) ---------- */
+@media (max-width: 640px) {
+  body { font-size: 14.5px; }
+  .section { margin-top: 22px; }
+  .section-head h2 { font-size: 18px; }
+  .section-head p { font-size: 13px; }
+  .card { padding: 14px 14px; }
+  .grid { gap: 12px; }
+
+  /* filters & detail boxes collapse behind a tap */
+  .fbox > summary, .more-box > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-weight: 700; color: var(--brand); }
+  .fbox > summary::-webkit-details-marker, .more-box > summary::-webkit-details-marker { display: none; }
+  .fbox > summary { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; font-size: 14px; }
+  .fbox > summary b { background: var(--brand); color: #fff; border-radius: 999px; padding: 0 8px; font-size: 12px; }
+  .fbox > summary::after, .more-box > summary::after { content: '▾'; margin-left: auto; transition: transform .15s; }
+  .fbox[open] > summary::after, .more-box[open] > summary::after { transform: rotate(180deg); }
+  .fbox[open] .frow { margin-top: 10px; }
+  .more-box > summary { font-size: 13.5px; padding: 6px 0; }
+  .more-box[open] > summary { margin-bottom: 10px; }
+  .insights { padding: 12px 14px; }
+  .ins-sum { color: var(--brand); }
+  .ai-sum { padding: 14px 16px; }
+  .ai-headline { font-size: 17px; margin: 10px 0 6px; }
+
+  /* bar rows: label on top, full-width bar below */
+  .bar-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label val" "track track"; gap: 3px 10px; }
+  .b-label { grid-area: label; }
+  .b-val { grid-area: val; }
+  .b-track { grid-area: track; height: 10px; }
+
+  /* matrices fit the screen */
+  .matrix { font-size: 12px; border-spacing: 2px; }
+  .matrix th { font-size: 10.5px; padding: 3px 2px; line-height: 1.25; }
+  .matrix th.rh { white-space: normal; max-width: 118px; min-width: 92px; font-size: 12px; line-height: 1.3; }
+  .matrix td.v { min-width: 30px; padding: 6px 2px; }
+
+  /* channel table becomes cards */
+  .tbl-cards thead { display: none; }
+  .tbl-cards, .tbl-cards tbody { display: block; }
+  .tbl-cards tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+  .tbl-cards td { border: none; padding: 0; text-align: left !important; font-weight: 700; }
+  .tbl-cards td.ch { grid-column: 1 / -1; }
+  .tbl-cards td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
+
+  /* word cloud & questions */
+  .cloud { gap: 6px; }
+  .cloud .kw { font-size: calc(var(--fs) * .8); }
+  .q-list { max-height: none; overflow: visible; grid-template-columns: minmax(0, 1fr); }
+  .q-toolbar { font-size: 12.5px; }
+  .q { padding: 10px 12px; }
+  .q p { font-size: 13.5px; margin-bottom: 6px; }
+  .q .meta { gap: 3px 4px; font-size: 11px; }
+  .q .meta span { padding: 0 6px; }
+  .heat .hh { font-size: 10px; }
+  .kpi .k-label { font-size: 12px; }
+  .tabs a { padding: 9px 12px 11px; font-size: 13.5px; }
 }

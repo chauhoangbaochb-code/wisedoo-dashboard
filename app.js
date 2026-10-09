@@ -42,6 +42,9 @@
   const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const hashStr = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return h; };
+  const isNarrow = () => window.matchMedia('(max-width: 640px)').matches;
+  const TOUCH = window.matchMedia('(hover: none)').matches;
+  const hoverWord = TOUCH ? 'chạm' : 'rê chuột';
   const eventTitle = ev => (CFG.events && CFG.events[ev] && CFG.events[ev].title) || ev;
   const top = m => { let best = null; for (const [k, v] of m) if (k !== UNKNOWN && (!best || v > best[1])) best = [k, v]; return best; };
 
@@ -214,7 +217,7 @@
     all: [], events: [], byEvent: new Map(),
     route: readRoute(),
     filters: freshFilters(),
-    q: { theme: null, word: null, hideEmpty: true },
+    q: { theme: null, word: null, hideEmpty: true, limit: 0 },
     matrixDim: 'mgmtExp',
     summaries: {},
     lastFetch: null, lastHash: null, knownIds: null, error: null, loading: false,
@@ -397,20 +400,22 @@
   function seqStep(v, max) { return v <= 0 ? 0 : Math.max(1, Math.min(6, Math.ceil((v / max) * 6))); }
 
   function heatmap(rows) {
-    const grid = DOW_ROWS.map(() => new Array(24).fill(0));
-    for (const r of rows) grid[DOW_ROWS.indexOf(r.ts.getDay())][r.ts.getHours()]++;
+    const bin = isNarrow() ? 3 : 1;              // điện thoại: gộp khung 3 tiếng cho vừa màn hình
+    const cols = 24 / bin;
+    const grid = DOW_ROWS.map(() => new Array(cols).fill(0));
+    for (const r of rows) grid[DOW_ROWS.indexOf(r.ts.getDay())][Math.floor(r.ts.getHours() / bin)]++;
     const max = Math.max(1, ...grid.flat());
-    let html = '<div class="heat-wrap"><div class="heat"><div></div>';
-    for (let h = 0; h < 24; h++) html += `<div class="hh">${h % 3 === 0 ? h + 'h' : ''}</div>`;
+    let html = `<div class="heat-wrap"><div class="heat${bin > 1 ? ' heat-bin' : ''}" style="grid-template-columns:34px repeat(${cols}, minmax(${bin > 1 ? 26 : 16}px, 1fr))"><div></div>`;
+    for (let c = 0; c < cols; c++) html += `<div class="hh">${bin > 1 || c % 3 === 0 ? c * bin + 'h' : ''}</div>`;
     DOW_ROWS.forEach((d, ri) => {
       html += `<div class="hl">${DOW[d]}</div>`;
-      for (let h = 0; h < 24; h++) {
-        const v = grid[ri][h];
-        html += `<div class="cell" style="background:var(--seq-${seqStep(v, max)})" data-tip="${DOW[d]} · ${h}h–${h + 1}h: ${v} đăng ký"></div>`;
+      for (let c = 0; c < cols; c++) {
+        const v = grid[ri][c];
+        html += `<div class="cell" style="background:var(--seq-${seqStep(v, max)})" data-tip="${DOW[d]} · ${c * bin}h–${(c + 1) * bin}h: ${v} đăng ký"></div>`;
       }
     });
     html += '</div></div>';
-    html += `<div class="scale">Ít ${[0, 1, 2, 3, 4, 5, 6].map(i => `<i style="background:var(--seq-${i})"></i>`).join('')} Nhiều <span style="margin-left:auto">Cao nhất: ${max}/ô</span></div>`;
+    html += `<div class="scale">Ít ${[0, 1, 2, 3, 4, 5, 6].map(i => `<i style="background:var(--seq-${i})"></i>`).join('')} Nhiều <span style="margin-left:auto">Cao nhất: ${max}/ô${bin > 1 ? ` · ô = ${bin} tiếng` : ''}</span></div>`;
     return html;
   }
 
@@ -593,7 +598,10 @@
     if (state.route.view === 'event') html += sel('session', 'Buổi', opts(r => r.session.label));
     const active = Object.values(state.filters).some(Boolean);
     if (active) html += `<button class="reset" data-reset-filters type="button">✕ Bỏ lọc</button><span class="active-note">Đang xem ${filterRows(base).length}/${base.length} đăng ký</span>`;
-    $('#filters').innerHTML = html;
+    const nOn = Object.values(state.filters).filter(Boolean).length;
+    const wasOpen = $('#filters details') ? $('#filters details').open : false;
+    $('#filters').innerHTML = `<details class="fbox"${!isNarrow() || wasOpen ? ' open' : ''}>
+      <summary>Bộ lọc${nOn ? ` <b>${nOn} đang bật</b>` : ''}</summary><div class="frow">${html}</div></details>`;
   }
 
   function renderTabs() {
@@ -603,6 +611,8 @@
       html += `<a href="#/event/${encodeURIComponent(ev)}" class="${r.view === 'event' && r.event === ev ? 'active' : ''}">${esc(eventTitle(ev))}<span class="count">${state.byEvent.get(ev).length}</span></a>`;
     }
     $('#tabs').innerHTML = html;
+    const act = $('#tabs a.active');
+    if (act) $('#tabs').scrollLeft = act.offsetLeft - 16;
   }
 
   function render(keepScroll) {
@@ -713,11 +723,12 @@
       <div class="ai-head"><span class="ai-badge">🤖 Tóm tắt AI hằng ngày</span>
         <span class="ai-meta">${esc(MODEL_NAMES[s.model] || s.model || '')}${when ? ` · viết lúc ${when}` : ''}${stale ? ' · <b>bản cũ — kiểm tra lịch chạy</b>' : ''}${filtered ? ' · tóm tắt toàn bộ dữ liệu, không theo bộ lọc' : ''}</span></div>
       <p class="ai-headline">${esc(s.headline)}</p>
+      <details class="more-box"${isNarrow() ? '' : ' open'}><summary>Xem chi tiết: họ là ai, đang lo gì, nên làm gì</summary>
       <div class="ai-grid">
         <div>${s.who ? `<h4>Họ là ai</h4><p>${esc(s.who)}</p>` : ''}${s.trend ? `<h4>Nhịp đăng ký</h4><p>${esc(s.trend)}</p>` : ''}</div>
         <div>${(s.concerns || []).length ? `<h4>Họ đang lo điều gì</h4><ol>${s.concerns.map(c => `<li><b>${esc(c.title)}</b>${c.detail ? ` — ${esc(c.detail)}` : ''}${c.quote ? `<q>${esc(c.quote)}</q>` : ''}</li>`).join('')}</ol>` : ''}</div>
         <div>${(s.actions || []).length ? `<h4>Nên làm hôm nay</h4><ul class="ai-act">${li(s.actions)}</ul>` : ''}${(s.watch || []).length ? `<h4>Cần để ý</h4><ul class="ai-watch">${li(s.watch)}</ul>` : ''}</div>
-      </div>
+      </div></details>
     </div>`;
   }
 
@@ -725,7 +736,9 @@
     const ins = buildInsights(rows, scope);
     if (!ins.length) return '';
     const hasAi = !!(state.summaries && state.summaries[scope === 'event' ? state.route.event : '__overview__']);
-    return `<div class="insights"><h3>${hasAi ? '📊 Số liệu nhanh (cập nhật liên tục)' : '💡 Đọc nhanh: họ là ai, đến từ đâu, đang lo gì?'}</h3><ul>${ins.map(i => `<li class="${i.warn ? 'warn' : ''}">${i.html}</li>`).join('')}</ul></div>`;
+    const list = `<ul>${ins.map(i => `<li class="${i.warn ? 'warn' : ''}">${i.html}</li>`).join('')}</ul>`;
+    if (hasAi) return `<div class="insights"><details class="more-box"${isNarrow() ? '' : ' open'}><summary class="ins-sum">📊 Số liệu nhanh (cập nhật liên tục) · ${ins.length} ý</summary>${list}</details></div>`;
+    return `<div class="insights"><h3>💡 Đọc nhanh: họ là ai, đến từ đâu, đang lo gì?</h3>${list}</div>`;
   }
 
   function sectionMomentum(rows, isEvent) {
@@ -743,7 +756,7 @@
       };
     }).sort((a, b) => (a.date ? +a.date : Infinity) - (b.date ? +b.date : Infinity));
     let body = `<div class="grid g-7-5">
-      ${card('Số lượng đăng ký theo ngày', isEvent ? 'Chia theo kênh (utm_source) · rê chuột để xem luỹ kế' : 'Chia theo sự kiện', legend(leg) + '<div class="chart-box"><canvas id="chDaily"></canvas></div>')}
+      ${card('Số lượng đăng ký theo ngày', isEvent ? `Chia theo kênh (utm_source) · ${hoverWord} vào cột để xem luỹ kế` : 'Chia theo sự kiện', legend(leg) + '<div class="chart-box"><canvas id="chDaily"></canvas></div>')}
       ${isEvent
         ? card('Đăng ký luỹ kế', 'Tổng số người đã đăng ký theo thời gian', '<div class="chart-box" style="margin-top:28px"><canvas id="chCum"></canvas></div>')
         : card('Tốc độ đăng ký giữa các sự kiện', 'Luỹ kế theo số ngày trước buổi đầu tiên — so sánh sự kiện nào “nóng” hơn', legend(leg) + '<div class="chart-box"><canvas id="chPace"></canvas></div>')}
@@ -764,12 +777,12 @@
     });
     const quality = srcItems.map(i => {
       const g = rows.filter(r => (r.source || UNKNOWN) === i.label);
-      return `<tr><td><span class="legend" style="margin:0"><span><i style="background:var(${state.sourceColor.get(i.label) || '--c-other'})"></i><b>${esc(i.label)}</b></span></span></td>
-        <td class="n">${g.length}</td><td class="n">${pct(g.length, n)}%</td>
-        <td class="n">${pct(g.filter(isManaging).length, g.length)}%</td>
-        <td class="n">${pct(g.filter(isSenior).length, g.length)}%</td>
-        <td class="n">${pct(g.filter(r => !r.noConcern).length, g.length)}%</td>
-        <td class="n">${pct(g.filter(r => r.consent === 'yes').length, g.length)}%</td></tr>`;
+      return `<tr><td class="ch"><span class="legend" style="margin:0"><span><i style="background:var(${state.sourceColor.get(i.label) || '--c-other'})"></i><b>${esc(i.label)}</b></span></span></td>
+        <td class="n" data-label="Đăng ký">${g.length}</td><td class="n" data-label="Tỉ trọng">${pct(g.length, n)}%</td>
+        <td class="n" data-label="Đang quản lý">${pct(g.filter(isManaging).length, g.length)}%</td>
+        <td class="n" data-label="KN QL > 3 năm">${pct(g.filter(isSenior).length, g.length)}%</td>
+        <td class="n" data-label="Có câu hỏi cụ thể">${pct(g.filter(r => !r.noConcern).length, g.length)}%</td>
+        <td class="n" data-label="Consent">${pct(g.filter(r => r.consent === 'yes').length, g.length)}%</td></tr>`;
     }).join('');
     const C = CFG.columns;
     const cityCard = C.city != null
@@ -780,7 +793,7 @@
       ${card('Chiến dịch (utm_campaign)', 'Bài đăng / chiến dịch cụ thể mang về đăng ký', barList(campItems, { total: n, subFn: i => i.src ? `qua ${i.src}` : '' }))}
       ${cityCard}
       <div class="card span2" style="grid-column:1/-1"><h3>Chất lượng theo kênh</h3><p class="hint">Kênh nào mang về đúng chân dung mục tiêu (người đang quản lý, có kinh nghiệm, có vấn đề cụ thể)?</p>
-        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kênh</th><th class="n">Đăng ký</th><th class="n">Tỉ trọng</th><th class="n">% đang quản lý</th><th class="n">% KN quản lý > 3 năm</th><th class="n">% có câu hỏi cụ thể</th><th class="n">% consent</th></tr></thead><tbody>${quality}</tbody></table></div></div>
+        <div class="tbl-wrap"><table class="tbl tbl-cards"><thead><tr><th>Kênh</th><th class="n">Đăng ký</th><th class="n">Tỉ trọng</th><th class="n">% đang quản lý</th><th class="n">% KN quản lý > 3 năm</th><th class="n">% có câu hỏi cụ thể</th><th class="n">% consent</th></tr></thead><tbody>${quality}</tbody></table></div></div>
     </div>`;
     return section(2, 'Họ đến từ đâu', 'Kênh, chiến dịch và chất lượng người đăng ký theo từng kênh', body);
   }
@@ -807,7 +820,7 @@
     const positions = toItems(countBy(rows, r => r.position));
     const nInd = rows.filter(r => r.industryByAi).length;
     const indHint = nInd
-      ? `🤖 AI đã xếp ${nInd}/${rows.length} người vào nhóm ngành chuẩn${nInd < rows.length ? ' · số còn lại đang chờ AI, tạm gộp theo cách viết' : ''} · rê chuột lên câu hỏi để xem học viên tự ghi gì`
+      ? `🤖 AI đã xếp ${nInd}/${rows.length} người vào nhóm ngành chuẩn${nInd < rows.length ? ' · số còn lại đang chờ AI, tạm gộp theo cách viết' : ''} · ${hoverWord} vào nhãn ngành ở câu hỏi để xem học viên tự ghi gì`
       : 'Đã gộp các cách viết khác nhau (vd. “Giáo dục ” và “giáo dục”). Một người có thể thuộc nhiều lĩnh vực.';
     const body = `<div class="grid g-7-5">
       ${card('Lĩnh vực đang hoạt động', indHint, barList(toItems(countBy(rows, r => r.industries)), { total: n, limit: 14 }))}
@@ -849,7 +862,7 @@
     const arranged = [];
     words.forEach((w, i) => (i % 2 ? arranged.push(w) : arranged.unshift(w)));
     const cloud = words.length ? `<div class="cloud">${arranged.map(w => `<button type="button" data-word="${esc(w.word)}"
-        class="kw${state.q.word === w.word ? ' selected' : ''}" style="--kc:var(${themeColor(w.theme)});font-size:${sizeOf(w.value).toFixed(1)}px"
+        class="kw${state.q.word === w.word ? ' selected' : ''}" style="--kc:var(${themeColor(w.theme)});--fs:${sizeOf(w.value).toFixed(1)}px"
         data-tip="“${esc(w.word)}” · ${w.value} câu hỏi · nhóm: ${esc(themeLabel(w.theme))} · bấm để lọc"><i></i>${esc(w.word)}</button>`).join('')}</div>`
       : '<div class="empty">Chưa đủ câu hỏi để trích từ khoá</div>';
 
@@ -862,6 +875,9 @@
     </div>`;
     return section(5, 'Họ bận tâm điều gì', 'Phân tích câu hỏi / khó khăn học viên gửi về', body);
   }
+
+  const qStep = () => (isNarrow() ? 5 : 10);
+  const qLimit = () => state.q.limit || qStep();
 
   function questionsBlock(rows) {
     const q = state.q;
@@ -876,7 +892,8 @@
       return h;
     };
     const active = q.theme ? themeLabel(q.theme) : q.word ? `“${q.word}”` : '';
-    const items = list.map(r => `<div class="q"><p>${mark(r.question || '(bỏ trống)')}</p><div class="meta">
+    const shown = list.slice(0, qLimit());
+    const items = shown.map(r => `<div class="q"><p>${mark(r.question || '(bỏ trống)')}</p><div class="meta">
       ${r.themes.filter(t => t !== 'other').map(t => `<span class="t">${esc(themeLabel(t))}</span>`).join('')}
       ${r.aiKeywords.map(k => `<span class="k${q.word === k ? ' on' : ''}" data-word="${esc(k)}" title="Từ khoá do AI rút ra · bấm để lọc">${esc(k)}</span>`).join('')}
       ${r.position ? `<span>${esc(r.position)}</span>` : ''}${r.industries.length ? `<span title="${esc(r.industryRaw ? `Học viên ghi: ${r.industryRaw}` : '')}">${esc(r.industries.join(', '))}</span>` : ''}
@@ -886,7 +903,7 @@
     return `<h3>Câu hỏi / khó khăn học viên gửi về</h3><p class="hint">Ẩn danh — chỉ hiện hồ sơ nghề nghiệp, không hiện tên / email / SĐT. Mới nhất ở trên.</p>
       <div class="q-toolbar"><div>${active ? `<span class="chip-on">Lọc: ${esc(active)}</span> <button type="button" data-clear-q>✕ Bỏ lọc</button> · ` : ''}${list.length} câu hỏi</div>
       <label><input type="checkbox" id="hideEmpty" ${q.hideEmpty ? 'checked' : ''}> Ẩn câu “chưa có / không”</label></div>
-      ${list.length ? `<div class="q-list">${items}</div>` : '<div class="empty">Không có câu hỏi phù hợp bộ lọc</div>'}`;
+      ${list.length ? `<div class="q-list">${items}</div>${list.length > shown.length ? `<button type="button" class="more" data-more-q>Xem thêm ${Math.min(qStep(), list.length - shown.length)} câu (còn ${list.length - shown.length})</button>` : ''}` : '<div class="empty">Không có câu hỏi phù hợp bộ lọc</div>'}`;
   }
 
   function sectionOps(rows, isEvent) {
@@ -938,10 +955,12 @@
     if (scrollToQuestions) $('#questions').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   view.addEventListener('click', e => {
+    if (e.target.closest('[data-more-q]')) { state.q.limit = qLimit() + qStep(); rerenderKeep(false); return; }
     const t = e.target.closest('[data-theme-id],[data-word],[data-goto],[data-clear-q]');
     if (!t) return;
     if (t.dataset.goto) { location.hash = `/event/${encodeURIComponent(t.dataset.goto)}`; return; }
     if (t.hasAttribute('data-clear-q')) { state.q.theme = null; state.q.word = null; rerenderKeep(false); return; }
+    state.q.limit = 0;
     if (t.dataset.themeId) { state.q.theme = state.q.theme === t.dataset.themeId ? null : t.dataset.themeId; state.q.word = null; }
     if (t.dataset.word) { state.q.word = state.q.word === t.dataset.word ? null : t.dataset.word; state.q.theme = null; }
     rerenderKeep(true);
@@ -958,7 +977,7 @@
     if (e.target.closest('[data-reset-filters]')) { state.filters = freshFilters(); render(true); }
   });
   window.addEventListener('hashchange', () => {
-    state.route = readRoute(); state.filters = freshFilters(); state.q = { theme: null, word: null, hideEmpty: true };
+    state.route = readRoute(); state.filters = freshFilters(); state.q = { theme: null, word: null, hideEmpty: true, limit: 0 };
     render(false); window.scrollTo(0, 0);
   });
   $('#refreshBtn').addEventListener('click', () => load());
@@ -982,6 +1001,7 @@
   setInterval(setLive, 5000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && state.lastFetch && Date.now() - state.lastFetch > 15000) load(); });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => state.all.length && render(true));
+  window.matchMedia('(max-width: 640px)').addEventListener('change', () => state.all.length && render(true));
 
   load();
 })();
