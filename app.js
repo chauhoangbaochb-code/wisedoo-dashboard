@@ -274,7 +274,8 @@
     all: [], events: [], byEvent: new Map(),
     route: readRoute(),
     filters: freshFilters(),
-    q: { theme: null, word: null, hideEmpty: true, limit: 0 },
+    q: { theme: null, word: null, hideEmpty: true, limit: 0, onlyHl: false, sort: 'ts', dir: -1 },
+    hl: loadHl(),
     matrixDim: 'mgmtExp', peopleMatrix: 'expTeam', pendingQ: false,
     summaries: {}, ads: null,
     lastFetch: null, lastHash: null, knownIds: null, error: null, loading: false,
@@ -1115,34 +1116,79 @@
     return section('', 'Họ bận tâm điều gì', 'Phân loại câu hỏi / khó khăn học viên gửi về', body);
   }
 
-  const qStep = () => (isNarrow() ? 5 : 10);
+  // Bảng câu hỏi kiểu Google Sheet: máy tính hiện hết trong khung cuộn, điện thoại hiện từng trang
+  const qStep = () => (isNarrow() ? 15 : Infinity);
   const qLimit = () => state.q.limit || qStep();
+  const HL_KEY = 'wd-highlight';
+  function loadHl() {
+    try { const v = JSON.parse(localStorage.getItem('wd-highlight') || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string' && x).slice(0, 12) : []; } catch (e) { return []; }
+  }
+  function saveHl() { try { localStorage.setItem(HL_KEY, JSON.stringify(state.hl)); } catch (e) { /* trình duyệt chặn lưu trữ */ } }
+  const reEsc = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  function qColumns(isEvent) {
+    const ord = (list, v) => { const i = list.indexOf(v); return i < 0 ? 99 : i; };
+    const cols = [
+      { key: 'ts', label: 'Thời gian', val: r => +r.ts, cls: 'c-time', cell: r => `${dayLabel(r.ts)} ${pad(r.ts.getHours())}:${pad(r.ts.getMinutes())}` },
+      { key: 'question', label: 'Câu hỏi / khó khăn', val: r => r.question.toLowerCase(), cls: 'c-q', cell: (r, mark) => `${mark(r.question || '(bỏ trống)')}${r.aiKeywords.length ? `<div class="kws">${r.aiKeywords.map(k => `<span class="k${state.q.word === k ? ' on' : ''}" data-word="${esc(k)}" title="Từ khoá AI · bấm để lọc">${esc(k)}</span>`).join('')}</div>` : ''}` },
+      { key: 'theme', label: 'Nhóm vấn đề', val: r => r.themes.map(themeLabel).join(', '), cls: 'c-theme', cell: r => r.themes.filter(t => t !== 'other').map(t => `<span class="tag" style="--kc:var(${themeColor(t)})">${esc(themeLabel(t))}</span>`).join('') },
+      { key: 'position', label: 'Vị trí', val: r => r.position, cls: 'nw', cell: r => esc(r.position) },
+      { key: 'industry', label: 'Lĩnh vực', val: r => r.industries.join(', '), cls: 'c-ind', cell: r => `<span title="${esc(r.industryRaw ? `Học viên ghi: ${r.industryRaw}` : '')}">${esc(r.industries.join(', '))}</span>` },
+      { key: 'mgmtExp', label: 'KN quản lý', val: r => ord(CFG.order.mgmtExp, r.mgmtExp), cls: 'nw', cell: r => esc(r.mgmtExp) },
+      { key: 'teamSize', label: 'Quy mô đội', val: r => ord(CFG.order.teamSize, r.teamSize), cls: 'c-team', cell: r => esc(r.teamSize) },
+      { key: 'age', label: 'Tuổi', val: r => (r.birthYear ? NOW_YEAR - r.birthYear : -1), cls: 'n', cell: r => (r.birthYear ? NOW_YEAR - r.birthYear : '') },
+      { key: 'source', label: 'Kênh', val: r => r.source, cell: r => esc(r.source) },
+    ];
+    if (!isEvent) cols.push({ key: 'event', label: 'Sự kiện', val: r => r.event, cls: 'nw', cell: r => esc(eventTitle(r.event)) });
+    return cols;
+  }
 
   function questionsBlock(rows) {
     const q = state.q;
-    let list = rows.slice().reverse();
+    const isEvent = state.route.view === 'event';
+    let list = rows.slice();
     if (q.hideEmpty) list = list.filter(r => !r.noConcern);
-    let hl = [];
-    if (q.theme) { list = list.filter(r => r.themes.includes(q.theme)); hl = q.theme === 'other' ? [] : (CFG.themes.find(t => t.id === q.theme) || { keywords: [] }).keywords; }
-    if (q.word) { list = list.filter(r => r.aiKeywords.includes(q.word) || r.question.toLowerCase().includes(q.word)); hl = [q.word]; }
-    const mark = text => {
-      let h = esc(text);
-      for (const k of hl) { const re = new RegExp(`(${esc(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'); h = h.replace(re, '<mark>$1</mark>'); }
-      return h;
-    };
-    const active = q.theme ? themeLabel(q.theme) : q.word ? `“${q.word}”` : '';
+    let themeHl = [];
+    if (q.theme) { list = list.filter(r => r.themes.includes(q.theme)); themeHl = q.theme === 'other' ? [] : (CFG.themes.find(t => t.id === q.theme) || { keywords: [] }).keywords; }
+    if (q.word) { list = list.filter(r => r.aiKeywords.includes(q.word) || r.question.toLowerCase().includes(q.word)); themeHl = [q.word]; }
+
+    // Từ khoá người xem tự thêm: mỗi từ một màu; đếm số câu chứa từ đó
+    const hl = state.hl;
+    const hits = hl.map(w => list.filter(r => r.question.toLowerCase().includes(w)).length);
+    if (q.onlyHl && hl.length) list = list.filter(r => hl.some(w => r.question.toLowerCase().includes(w)));
+
+    const terms = [...hl.map((w, i) => ({ w, cls: `hl${(i % 6) + 1}` })), ...themeHl.filter(w => !hl.includes(w)).map(w => ({ w, cls: 'hl0' }))]
+      .filter(t => t.w).sort((x, y) => y.w.length - x.w.length);
+    const re = terms.length ? new RegExp(`(${terms.map(t => reEsc(esc(t.w))).join('|')})`, 'gi') : null;
+    const clsOf = m => (terms.find(t => esc(t.w).toLowerCase() === m.toLowerCase()) || {}).cls || 'hl0';
+    const mark = text => (re ? esc(text).replace(re, m => `<mark class="${clsOf(m)}">${m}</mark>`) : esc(text));
+
+    const cols = qColumns(isEvent);
+    const col = cols.find(c => c.key === q.sort) || cols[0];
+    list.sort((x, y) => { const a = col.val(x), b = col.val(y); return (a < b ? -1 : a > b ? 1 : 0) * q.dir || (y.ts - x.ts); });
     const shown = list.slice(0, qLimit());
-    const items = shown.map(r => `<div class="q"><p>${mark(r.question || '(bỏ trống)')}</p><div class="meta">
-      ${r.themes.filter(t => t !== 'other').map(t => `<span class="t">${esc(themeLabel(t))}</span>`).join('')}
-      ${r.aiKeywords.map(k => `<span class="k${q.word === k ? ' on' : ''}" data-word="${esc(k)}" title="Từ khoá do AI rút ra · bấm để lọc">${esc(k)}</span>`).join('')}
-      ${r.position ? `<span>${esc(r.position)}</span>` : ''}${r.industries.length ? `<span title="${esc(r.industryRaw ? `Học viên ghi: ${r.industryRaw}` : '')}">${esc(r.industries.join(', '))}</span>` : ''}
-      ${r.mgmtExp ? `<span>KN QL: ${esc(r.mgmtExp)}</span>` : ''}${r.teamSize ? `<span>Đội: ${esc(r.teamSize)}</span>` : ''}
-      ${r.birthYear ? `<span>${NOW_YEAR - r.birthYear} tuổi</span>` : ''}<span>${dayLabel(r.ts)} · ${esc(r.source || '?')}</span>
-      ${state.route.view === 'overview' ? `<span>${esc(eventTitle(r.event))}</span>` : ''}</div></div>`).join('');
-    return `<h3>Câu hỏi / khó khăn học viên gửi về</h3><p class="hint">Ẩn danh — chỉ hiện hồ sơ nghề nghiệp, không hiện tên / email / SĐT. Mới nhất ở trên.</p>
-      <div class="q-toolbar"><div>${active ? `<span class="chip-on">Lọc: ${esc(active)}</span> <button type="button" data-clear-q>✕ Bỏ lọc</button> · ` : ''}${list.length} câu hỏi</div>
-      <label><input type="checkbox" id="hideEmpty" ${q.hideEmpty ? 'checked' : ''}> Ẩn câu “chưa có / không”</label></div>
-      ${list.length ? `<div class="q-list">${items}</div>${list.length > shown.length ? `<button type="button" class="more" data-more-q>Xem thêm ${Math.min(qStep(), list.length - shown.length)} câu (còn ${list.length - shown.length})</button>` : ''}` : '<div class="empty">Không có câu hỏi phù hợp bộ lọc</div>'}`;
+
+    const active = q.theme ? themeLabel(q.theme) : q.word ? `“${q.word}”` : '';
+    const head = `<tr><th class="rn">#</th>${cols.map(c => `<th data-sort="${c.key}" class="${c.key === col.key ? 'sorted' : ''} ${c.cls || ''}" title="Bấm để sắp xếp">${c.label}${c.key === col.key ? (q.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>`;
+    const body = shown.map((r, i) => `<tr><td class="rn">${i + 1}</td>${cols.map(c => `<td class="${c.cls || ''}">${c.cell(r, mark)}</td>`).join('')}</tr>`).join('');
+
+    return `<div class="card-head"><div><h3>Câu hỏi / khó khăn học viên gửi về</h3><p class="hint">Ẩn danh — chỉ hiện hồ sơ nghề nghiệp, không hiện tên / email / SĐT · bấm tiêu đề cột để sắp xếp</p></div></div>
+      <div class="hl-bar">
+        <form class="hl-form" data-hl-form autocomplete="off">
+          <input name="hl" type="text" placeholder="Tô sáng từ khoá, cách nhau dấu phẩy — vd: giao việc, deadline" aria-label="Từ khoá cần tô sáng">
+          <button type="submit">Tô sáng</button>
+        </form>
+        ${hl.length ? `<div class="hl-chips">${hl.map((w, i) => `<span class="hl-chip hl${(i % 6) + 1}">${esc(w)} <small>${hits[i]}</small><button type="button" data-hl-del="${i}" aria-label="Bỏ tô sáng ${esc(w)}">×</button></span>`).join('')}
+          <button type="button" class="hl-clear" data-hl-clear>Xoá hết</button></div>` : ''}
+      </div>
+      <div class="q-toolbar"><div>${active ? `<span class="chip-on">Lọc: ${esc(active)}</span> <button type="button" data-clear-q>✕ Bỏ lọc</button> · ` : ''}<b>${list.length}</b> câu hỏi</div>
+        <div class="q-opts">
+          ${hl.length ? `<label><input type="checkbox" id="onlyHl" ${q.onlyHl ? 'checked' : ''}> Chỉ hiện câu có từ khoá tô sáng</label>` : ''}
+          <label><input type="checkbox" id="hideEmpty" ${q.hideEmpty ? 'checked' : ''}> Ẩn câu “chưa có / không”</label>
+        </div></div>
+      ${list.length ? `<div class="q-sheet"><table class="q-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+        ${list.length > shown.length ? `<button type="button" class="more" data-more-q>Xem thêm ${Math.min(15, list.length - shown.length)} câu (còn ${list.length - shown.length})</button>` : ''}`
+        : '<div class="empty">Không có câu hỏi phù hợp bộ lọc</div>'}`;
   }
 
   function sectionOps(rows, isEvent) {
@@ -1193,7 +1239,16 @@
     if (scrollToQuestions) $('#questions').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   view.addEventListener('click', e => {
-    if (e.target.closest('[data-more-q]')) { state.q.limit = qLimit() + qStep(); rerenderKeep(false); return; }
+    if (e.target.closest('[data-more-q]')) { state.q.limit = qLimit() + 15; rerenderKeep(false); return; }
+    const sortTh = e.target.closest('[data-sort]');
+    if (sortTh) {
+      const k = sortTh.dataset.sort;
+      state.q.dir = state.q.sort === k ? -state.q.dir : (k === 'ts' ? -1 : 1);
+      state.q.sort = k; rerenderKeep(false); return;
+    }
+    const del = e.target.closest('[data-hl-del]');
+    if (del) { state.hl.splice(+del.dataset.hlDel, 1); saveHl(); rerenderKeep(false); return; }
+    if (e.target.closest('[data-hl-clear]')) { state.hl = []; state.q.onlyHl = false; saveHl(); rerenderKeep(false); return; }
     const t = e.target.closest('[data-theme-id],[data-word],[data-goto],[data-clear-q]');
     if (!t) return;
     if (t.dataset.goto) { location.hash = `/event/${encodeURIComponent(t.dataset.goto)}`; return; }
@@ -1208,11 +1263,21 @@
     if (t.dataset.word) { state.q.word = state.q.word === t.dataset.word ? null : t.dataset.word; state.q.theme = null; }
     rerenderKeep(true);
   });
+  view.addEventListener('submit', e => {
+    if (!e.target.matches('[data-hl-form]')) return;
+    e.preventDefault();
+    const words = e.target.hl.value.split(/[,;\n]/).map(w => clean(w).toLowerCase()).filter(w => w.length >= 2);
+    for (const w of words) if (!state.hl.includes(w)) state.hl.push(w);
+    state.hl = state.hl.slice(0, 12); saveHl();
+    rerenderKeep(false);
+    const inp = $('[data-hl-form] input'); if (inp) inp.focus({ preventScroll: true });
+  });
   view.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button]')) { e.preventDefault(); e.target.click(); } });
   view.addEventListener('change', e => {
     if (e.target.matches('[data-matrix]')) { state.matrixDim = e.target.value; rerenderKeep(false); }
     if (e.target.matches('[data-pmatrix]')) { state.peopleMatrix = e.target.value; rerenderKeep(false); }
     if (e.target.id === 'hideEmpty') { state.q.hideEmpty = e.target.checked; rerenderKeep(false); }
+    if (e.target.id === 'onlyHl') { state.q.onlyHl = e.target.checked; rerenderKeep(false); }
     if (e.target.dataset.targetEv) {
       const v = parseInt(e.target.value, 10);
       if (v > 0) saveTarget(e.target.dataset.targetEv, e.target.dataset.targetLabel, v);
@@ -1230,7 +1295,7 @@
     state.route = readRoute();
     // đổi sự kiện → làm mới bộ lọc; chỉ đổi tab con → giữ nguyên bộ lọc
     if (prev.view !== state.route.view || prev.event !== state.route.event) {
-      state.filters = freshFilters(); state.q = { theme: null, word: null, hideEmpty: true, limit: 0 };
+      state.filters = freshFilters(); state.q = { ...state.q, theme: null, word: null, limit: 0 };
     }
     render(false);
     if (state.pendingQ && $('#questions')) $('#questions').scrollIntoView({ block: 'start' });

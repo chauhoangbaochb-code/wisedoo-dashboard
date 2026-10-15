@@ -301,6 +301,49 @@ button, select, input { font: inherit; color: inherit; }
 .q .meta .k { border-style: dashed; color: var(--text-2); cursor: pointer; }
 .q .meta .k:hover, .q .meta .k.on { border-color: var(--brand); color: var(--brand); }
 
+/* ---------- Bảng câu hỏi kiểu Google Sheet ---------- */
+.hl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 4px 0 12px; }
+.hl-form { display: flex; flex: 1 1 360px; max-width: 560px; }
+.hl-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-right: none; border-radius: 10px 0 0 10px; padding: 8px 12px; background: var(--surface); font-size: 14px; }
+.hl-form input:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+.hl-form button { border: 1px solid var(--brand); background: var(--brand); color: #fff; font-weight: 700; border-radius: 0 10px 10px 0; padding: 8px 14px; cursor: pointer; }
+.hl-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.hl-chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 13px; font-weight: 700; color: #07070A; }
+.hl-chip small { font-weight: 600; opacity: .7; }
+.hl-chip button { border: none; background: none; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; color: inherit; opacity: .6; }
+.hl-chip button:hover { opacity: 1; }
+.hl-clear { border: none; background: none; color: var(--muted); font-weight: 700; cursor: pointer; font-size: 13px; }
+mark.hl0, .hl0 { background: #ffe58a; }
+mark.hl1, .hl1 { background: #fff176; }
+mark.hl2, .hl2 { background: #b9f6ca; }
+mark.hl3, .hl3 { background: #ffcdd2; }
+mark.hl4, .hl4 { background: #b3e5fc; }
+mark.hl5, .hl5 { background: #ffd8a8; }
+mark.hl6, .hl6 { background: #e1bee7; }
+.q-table mark { color: #07070A; border-radius: 3px; padding: 0 2px; }
+.q-opts { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.q-sheet { border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 72vh; background: var(--surface); }
+.q-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 960px; font-size: 13.5px; }
+.q-table th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); color: var(--muted); font-weight: 700; font-size: 12px; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line-soft); white-space: nowrap; cursor: pointer; user-select: none; }
+.q-table th:hover { color: var(--text); }
+.q-table th.sorted { color: var(--brand); }
+.q-table td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft); vertical-align: top; color: var(--text-2); line-height: 1.45; }
+.q-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 40%, var(--surface)); }
+.q-table tbody tr:hover td { background: var(--brand-50); }
+.q-table .rn { position: sticky; left: 0; z-index: 1; width: 42px; min-width: 42px; text-align: center; color: var(--faint); font-size: 12px; background: var(--surface-2) !important; border-right: 1px solid var(--line); cursor: default; }
+.q-table th.rn { z-index: 3; }
+.q-table .c-time { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+.q-table .c-q { min-width: 300px; color: var(--text); white-space: pre-line; }
+.q-table .c-ind { min-width: 110px; max-width: 170px; }
+.q-table .c-theme { min-width: 150px; max-width: 210px; }
+.q-table .c-team { min-width: 96px; max-width: 130px; }
+.q-table .nw { white-space: nowrap; }
+.q-table .n { text-align: right; font-variant-numeric: tabular-nums; }
+.q-table .tag { display: inline-block; margin: 0 4px 4px 0; font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 1px 8px; color: var(--text); background: color-mix(in srgb, var(--kc) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--kc) 40%, transparent); white-space: nowrap; }
+.q-table .kws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; white-space: normal; }
+.q-table .kws .k { font-size: 11.5px; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; padding: 0 7px; cursor: pointer; }
+.q-table .kws .k:hover, .q-table .kws .k.on { color: var(--brand); border-color: var(--brand); }
+
 /* ---------- Tables ---------- */
 .tbl-wrap { overflow-x: auto; }
 table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -405,6 +448,8 @@ footer { color: var(--faint); font-size: 12.5px; text-align: center; padding: 36
   .cloud { gap: 6px; }
   .cloud .kw { font-size: calc(var(--fs) * .8); }
   .q-list { max-height: none; overflow: visible; grid-template-columns: minmax(0, 1fr); }
+  .q-sheet { max-height: none; }
+  .q-table .c-q { min-width: 260px; }
   .q-toolbar { font-size: 12.5px; }
   .q { padding: 10px 12px; }
   .q p { font-size: 13.5px; margin-bottom: 6px; }
