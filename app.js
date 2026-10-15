@@ -562,16 +562,17 @@
     }).join('')}</div>`;
   }
 
-  function headKpis(rows, heroSub, span) {
+  function headKpis(rows, heroSub, span, extra = '') {
     const n = rows.length, now = Date.now();
     const w7 = rows.filter(r => now - r.ts < 7 * DAY).length;
     const mg = rows.filter(isManaging).length;
-    return `<div class="kpis k5">
+    return `<div class="kpis ${extra ? 'k6' : 'k5'}">
       ${kpi('Tổng lượt đăng ký', fmt(n), heroSub, true)}
       ${kpi('Trong 24 giờ qua', fmt(last24(rows).cur), 'đăng ký mới')}
       ${kpi('Trong 7 ngày qua', fmt(w7), `bình quân ${(w7 / Math.min(7, span)).toFixed(1)} mỗi ngày`)}
       ${kpi('Bình quân từ ngày mở', (n / span).toFixed(1), `mỗi ngày, qua ${span} ngày`)}
       ${kpi('Đang phụ trách người', `${pct(mg, n)}%`, `${fmt(mg)} người có nhóm riêng`)}
+      ${extra}
     </div>`;
   }
 
@@ -769,7 +770,7 @@
     const repeat = [...perPerson.values()].filter(s => s.size >= 2).length;
     const span = n ? Math.max(1, Math.round((startOfDay(new Date()) - startOfDay(rows[0].ts)) / DAY) + 1) : 1;
     let html = sessionCards(state.all, rows, true);
-    html += headKpis(rows, `${fmt(people.size)} người duy nhất${repeat ? ` · ${fmt(repeat)} người đi ≥ 2 sự kiện` : ''}`, span);
+    html += headKpis(rows, `${fmt(people.size)} người duy nhất${repeat ? ` · ${fmt(repeat)} người đi ≥ 2 sự kiện` : ''}`, span, costKpi(state.all, false));
     html += aiSummaryBox('__overview__') + insightsBox(rows, 'overview');
     // event comparison table
     const trs = state.events.map(ev => {
@@ -809,7 +810,7 @@
     const span = n ? Math.max(1, Math.round((startOfDay(new Date(Math.min(Date.now(), start ? +start : Date.now()))) - startOfDay(rows[0].ts)) / DAY) + 1) : 1;
     const dup = duplicates(rows);
     let html = sessionCards(base, rows, false);
-    html += headKpis(rows, dup ? `${fmt(n - dup)} người · gộp ${fmt(dup)} lượt trùng` : 'Không có lượt trùng', span);
+    html += headKpis(rows, dup ? `${fmt(n - dup)} người · gộp ${fmt(dup)} lượt trùng` : 'Không có lượt trùng', span, costKpi(base, true));
     return html + aiSummaryBox(state.route.event) + insightsBox(rows, 'event');
   }
 
@@ -902,26 +903,17 @@
     return section(2, 'Họ đến từ đâu', 'Kênh, chiến dịch và chất lượng người đăng ký theo từng kênh', body);
   }
 
-  function sectionAds(base, isEvent) {
-    const desc = 'Chi tiêu, lead và chi phí trên mỗi đăng ký — lấy từ tab “Facebook Ads” trong Sheet';
-    if (!state.ads) {
-      return section(3, 'Quảng cáo Facebook', desc, card('Chưa có dữ liệu quảng cáo', '', `<div class="note">Dashboard chưa nhận được tab <b>“${esc(adsCfg().sheetName)}”</b>. Dán <b>Code.gs</b> bản mới (có hàm <b>readAdsSheet_</b>) vào Apps Script rồi deploy bản mới — xem mục “Chi phí quảng cáo” trong HUONG-DAN.md.</div>`));
-    }
-    const ads = state.ads.rows.filter(a => !isEvent || adEvent(a) === state.route.event);
-    if (!ads.length) return section(3, 'Quảng cáo Facebook', desc, card('Chưa có quảng cáo cho sự kiện này', '', `<div class="note">Tab “${esc(adsCfg().sheetName)}” chưa có chiến dịch nào có tên chứa “${esc(state.route.event)}”. Nếu tên chiến dịch đặt khác, khai báo trong <b>config.js → ads.eventOf</b>.</div>`));
+  const adsMoney = v => (state.ads && state.ads.currency && state.ads.currency !== 'USD'
+    ? `${fmt(Math.round(v))} ${state.ads.currency}` : `$${v.toFixed(v > 0 && v < 0.01 ? 4 : 2)}`);
+  const adsSum = (list, k) => list.reduce((s, a) => s + a[k], 0);
+  const adsLeads = list => list.filter(a => isLeadType(a.resultType)).reduce((s, a) => s + a.results, 0);
+  const adsOf = isEvent => (state.ads ? state.ads.rows.filter(a => !isEvent || adEvent(a) === state.route.event) : []);
 
-    const cur = state.ads.currency;
-    const fx = adsCfg().fxRate;
-    const money = v => (cur === 'USD' || !cur ? `$${v.toFixed(v > 0 && v < 0.01 ? 4 : 2)}` : `${fmt(Math.round(v))} ${cur}`);
-    const vnd = v => { const d = v * fx; return d >= 1e6 ? `${(d / 1e6).toFixed(2).replace('.', ',')} tr ₫` : `${fmt(Math.round(d / 1000))}k ₫`; };
-    const sum = (list, k) => list.reduce((s, a) => s + a[k], 0);
-    const leadsOf = list => list.filter(a => isLeadType(a.resultType)).reduce((s, a) => s + a.results, 0);
-    const spend = sum(ads, 'spend'), leads = leadsOf(ads);
+  function adsStats(base, ads) {
+    const spend = adsSum(ads, 'spend'), leads = adsLeads(ads);
     // Click / CTR / CPC chỉ tính chiến dịch ra lead — chiến dịch ThruPlay không tối ưu cho click
     const leadCamps = new Set(ads.filter(a => isLeadType(a.resultType)).map(a => a.campaign));
     const leadAds = leadCamps.size ? ads.filter(a => leadCamps.has(a.campaign)) : ads;
-    const clicks = sum(leadAds, 'clicks'), impr = sum(leadAds, 'impressions');
-
     // Đăng ký đến từ quảng cáo: kênh Facebook/Instagram + utm_campaign khớp tên chiến dịch quảng cáo
     const camps = [...new Set(ads.map(a => normKey(a.campaign)))];
     const utmList = adsCfg().utmCampaigns;
@@ -929,10 +921,37 @@
       ? utmList.some(u => normKey(u) === normKey(r.campaign))
       : normKey(r.campaign).length >= 4 && camps.some(c => c.includes(normKey(r.campaign))));
     const regs = base.filter(fromAds);
-    const utms = [...new Set(regs.map(r => r.campaign))];
-
     const starts = ads.map(a => a.reportStart).filter(Boolean), ends = ads.map(a => a.reportEnd).filter(Boolean);
-    const period = starts.length && ends.length ? `${dayLabel(new Date(Math.min(...starts)))} – ${dayLabel(new Date(Math.max(...ends)))}` : '';
+    return {
+      spend, leads, leadAds, regs,
+      clicks: adsSum(leadAds, 'clicks'), impr: adsSum(leadAds, 'impressions'),
+      utms: [...new Set(regs.map(r => r.campaign))],
+      period: starts.length && ends.length ? `${dayLabel(new Date(Math.min(...starts)))} – ${dayLabel(new Date(Math.max(...ends)))}` : '',
+    };
+  }
+
+  // Ô "Chi phí / 1 đăng ký" ở đầu trang — chỉ hiện khi có dữ liệu quảng cáo
+  function costKpi(base, isEvent) {
+    const ads = adsOf(isEvent);
+    if (!ads.length) return '';
+    const { spend, regs } = adsStats(base, ads);
+    return regs.length
+      ? kpi('Chi phí / 1 đăng ký', adsMoney(spend / regs.length), `${adsMoney(spend)} ÷ ${fmt(regs.length)} người từ quảng cáo`)
+      : kpi('Chi phí / 1 đăng ký', base.length ? adsMoney(spend / base.length) : '—', `${adsMoney(spend)} ÷ ${fmt(base.length)} đăng ký mọi kênh`);
+  }
+
+  function sectionAds(base, isEvent) {
+    const desc = 'Chi tiêu, lead và chi phí trên mỗi đăng ký — lấy từ tab “Facebook Ads” trong Sheet';
+    if (!state.ads) {
+      return section(3, 'Quảng cáo Facebook', desc, card('Chưa có dữ liệu quảng cáo', '', `<div class="note">Dashboard chưa nhận được tab <b>“${esc(adsCfg().sheetName)}”</b>. Dán <b>Code.gs</b> bản mới (có hàm <b>readAdsSheet_</b>) vào Apps Script rồi deploy bản mới — xem mục “Chi phí quảng cáo” trong HUONG-DAN.md.</div>`));
+    }
+    const ads = adsOf(isEvent);
+    if (!ads.length) return section(3, 'Quảng cáo Facebook', desc, card('Chưa có quảng cáo cho sự kiện này', '', `<div class="note">Tab “${esc(adsCfg().sheetName)}” chưa có chiến dịch nào có tên chứa “${esc(state.route.event)}”. Nếu tên chiến dịch đặt khác, khai báo trong <b>config.js → ads.eventOf</b>.</div>`));
+
+    const { spend, leads, leadAds, clicks, impr, regs, utms, period } = adsStats(base, ads);
+    const fx = adsCfg().fxRate;
+    const vnd = v => { const d = v * fx; return d >= 1e6 ? `${(d / 1e6).toFixed(2).replace('.', ',')} tr ₫` : `${fmt(Math.round(d / 1000))}k ₫`; };
+    const sum = adsSum, leadsOf = adsLeads, money = adsMoney;
     const per = (a, b) => (b ? money(a / b) : '—');
 
     const tiles = `<div class="kpis k5">
