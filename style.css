@@ -282,6 +282,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pill.no { background: color-mix(in srgb, var(--bad) 13%, transparent); color: var(--bad); }
 .pill.na { background: var(--surface-2); color: var(--muted); }
 
+/* ---------- Ads tables ---------- */
+.ads-tbl td.ch { min-width: 170px; }
+.ads-tbl .sub { display: block; color: var(--faint); font-size: 12px; font-weight: 500; }
+.ads-tbl .mini { height: 4px; background: var(--bar-track); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.ads-tbl .mini i { display: block; height: 100%; background: var(--bar); border-radius: 2px; }
+
 /* ---------- Consent ---------- */
 .stack { display: flex; height: 18px; border-radius: 5px; overflow: hidden; gap: 2px; margin: 8px 0 12px; background: var(--surface); }
 .stack div { height: 100%; }

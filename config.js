@@ -45,6 +45,19 @@ window.DASHBOARD_CONFIG = {
   // Ô "Mục tiêu" trên dashboard ghi đè số này — chỉ lưu trên trình duyệt của người nhập.
   defaultTarget: 100,
 
+  // Chi phí quảng cáo — đọc tab xuất từ Trình quản lý quảng cáo Meta (cần apps-script/Ads.gs).
+  ads: {
+    sheetName: 'Facebook Ads',
+    // Chiến dịch tự gắn vào sự kiện khi tên chiến dịch chứa tên sự kiện (MCDelegation_… → Delegation).
+    // Đặt tên khác thì khai báo tay: { 'Ten_chien_dich': 'Delegation' }
+    eventOf: {},
+    // Đăng ký "từ quảng cáo" = utm_source facebook + utm_campaign nằm trong tên chiến dịch
+    // (mc_delegation ↔ MCDelegation_Leads_Web). Muốn chỉ định cứng: ['mc_delegation']
+    utmCampaigns: null,
+    // Tỉ giá để hiện thêm số tiền VNĐ, ví dụ 26000. Để 0 thì chỉ hiện đơn vị gốc (USD).
+    fxRate: 0,
+  },
+
   // Tên hiển thị đẹp cho từng sự kiện (key = giá trị ở cột event). Không bắt buộc.
   // Mục tiêu riêng: `target: 120` cho mọi buổi của sự kiện, hoặc
   // `targets: { '19:30-21:00, T5 05/11/2026': 80 }` cho từng buổi (ghi đúng như cột "buổi" trong Sheet).

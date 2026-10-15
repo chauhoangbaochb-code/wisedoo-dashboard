@@ -205,12 +205,60 @@
     let data;
     try { data = await res.json(); } catch (e) { throw new Error('Apps Script không trả về JSON — kiểm tra quyền truy cập Web App là "Anyone"'); }
     state.summaries = data.summaries || {};
-    return (data.sheets || []).map(sh => {
+    const adsName = keyOf(adsCfg().sheetName);
+    const adsSheet = (data.sheets || []).find(sh => keyOf(sh.name) === adsName);
+    state.ads = parseAds((data.ads && data.ads.rows) || (adsSheet && adsSheet.rows) || null);
+    return (data.sheets || []).filter(sh => sh !== adsSheet).map(sh => {
       const src = CFG.sources.find(x => String(x.gid) === String(sh.gid) || x.label === sh.name) || { label: sh.name };
       const columns = { ...(src.columns || CFG.columns) };
       if (sh.aiCols) { columns.aiThemes = sh.aiCols.themes; columns.aiKeywords = sh.aiCols.keywords; columns.aiIndustry = sh.aiCols.industry; }
       return { src: { ...src, columns }, rows: sh.rows || [] };
     });
+  }
+
+  /* ---------------- quảng cáo (tab "Facebook Ads") ---------------- */
+  const adsCfg = () => ({ sheetName: 'Facebook Ads', eventOf: {}, utmCampaigns: null, fxRate: 0, ...(CFG.ads || {}) });
+  const META_SOURCES = ['facebook', 'fb', 'instagram', 'ig', 'meta'];
+  // Nhận cả bản xuất tiếng Việt lẫn tiếng Anh của Trình quản lý quảng cáo
+  const ADS_HEADERS = {
+    campaign: /^(tên chiến dịch|campaign name)$/,
+    adset: /^(tên nhóm quảng cáo|ad set name)$/,
+    ad: /^(tên quảng cáo|ad name)$/,
+    impressions: /^(lượt hiển thị|impressions)$/,
+    resultType: /^(loại kết quả|result type|result indicator)$/,
+    results: /^(kết quả|results)$/,
+    spend: /^(số tiền đã chi tiêu|amount spent)/,
+    clicks: /^(lượt click vào liên kết|link clicks)$/,
+    reportStart: /^(lượt bắt đầu báo cáo|bắt đầu báo cáo|reporting starts)$/,
+    reportEnd: /^(lượt kết thúc báo cáo|kết thúc báo cáo|reporting ends)$/,
+  };
+  const normKey = s => clean(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/[^a-z0-9]/g, '');
+  const num = v => (typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(/,/g, '')) || 0);
+  const isLeadType = t => /lead|khách hàng tiềm năng|đăng ký|registration|form/i.test(t || '');
+  const isoDate = v => { const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(clean(v)); return m ? new Date(+m[1], m[2] - 1, +m[3]) : null; };
+
+  function parseAds(table) {
+    if (!Array.isArray(table) || table.length < 2) return null;
+    const head = table[0].map(h => clean(h).toLowerCase());
+    const idx = {};
+    for (const [k, re] of Object.entries(ADS_HEADERS)) idx[k] = head.findIndex(h => re.test(h));
+    if (idx.campaign < 0 || idx.spend < 0) return null;
+    const currency = (/\(([a-z]{3})\)/i.exec(table[0][idx.spend]) || [])[1] || '';
+    const get = (r, k) => (idx[k] < 0 ? '' : r[idx[k]]);
+    const rows = table.slice(1).filter(r => clean(get(r, 'campaign'))).map(r => ({
+      campaign: clean(get(r, 'campaign')), adset: clean(get(r, 'adset')), ad: clean(get(r, 'ad')),
+      impressions: num(get(r, 'impressions')), clicks: num(get(r, 'clicks')), spend: num(get(r, 'spend')),
+      resultType: clean(get(r, 'resultType')), results: num(get(r, 'results')),
+      reportStart: isoDate(get(r, 'reportStart')), reportEnd: isoDate(get(r, 'reportEnd')),
+    }));
+    return { currency: currency.toUpperCase(), rows };
+  }
+
+  function adEvent(a) {
+    const map = adsCfg().eventOf;
+    if (map[a.campaign]) return map[a.campaign];
+    const c = normKey(a.campaign);
+    return state.events.find(ev => normKey(ev).length >= 3 && c.includes(normKey(ev))) || '';
   }
 
   /* ---------------- state ---------------- */
@@ -221,7 +269,7 @@
     filters: freshFilters(),
     q: { theme: null, word: null, hideEmpty: true, limit: 0 },
     matrixDim: 'mgmtExp',
-    summaries: {},
+    summaries: {}, ads: null,
     lastFetch: null, lastHash: null, knownIds: null, error: null, loading: false,
     sourceColor: new Map(), eventColor: new Map(),
   };
@@ -266,7 +314,7 @@
         for (const r of rows) { const rec = toRecord(r, src.columns || CFG.columns, src); if (rec) recs.push(rec); }
       }
       recs.sort((a, b) => a.ts - b.ts);
-      raw += JSON.stringify(state.summaries);
+      raw += JSON.stringify(state.summaries) + JSON.stringify(state.ads);
       state.lastFetch = new Date(); state.error = null;
       const h = hashStr(raw);
       if (h !== state.lastHash) {
@@ -702,6 +750,7 @@
     let html = isEvent ? eventHeader(rows, base) : overviewHeader(rows);
     html += sectionMomentum(rows, isEvent);
     html += sectionSource(rows);
+    html += sectionAds(base, isEvent);
     html += sectionWho(rows);
     html += sectionWork(rows);
     html += sectionConcerns(rows);
@@ -853,6 +902,85 @@
     return section(2, 'Họ đến từ đâu', 'Kênh, chiến dịch và chất lượng người đăng ký theo từng kênh', body);
   }
 
+  function sectionAds(base, isEvent) {
+    const desc = 'Chi tiêu, lead và chi phí trên mỗi đăng ký — lấy từ tab “Facebook Ads” trong Sheet';
+    if (!state.ads) {
+      return section(3, 'Quảng cáo Facebook', desc, card('Chưa có dữ liệu quảng cáo', '', `<div class="note">Dashboard chưa nhận được tab <b>“${esc(adsCfg().sheetName)}”</b>. Thêm file <b>apps-script/Ads.gs</b> vào Apps Script, sửa 1 dòng trong <b>doGet</b> rồi deploy bản mới — xem mục “Chi phí quảng cáo” trong HUONG-DAN.md.</div>`));
+    }
+    const ads = state.ads.rows.filter(a => !isEvent || adEvent(a) === state.route.event);
+    if (!ads.length) return section(3, 'Quảng cáo Facebook', desc, card('Chưa có quảng cáo cho sự kiện này', '', `<div class="note">Tab “${esc(adsCfg().sheetName)}” chưa có chiến dịch nào có tên chứa “${esc(state.route.event)}”. Nếu tên chiến dịch đặt khác, khai báo trong <b>config.js → ads.eventOf</b>.</div>`));
+
+    const cur = state.ads.currency;
+    const fx = adsCfg().fxRate;
+    const money = v => (cur === 'USD' || !cur ? `$${v.toFixed(v > 0 && v < 0.01 ? 4 : 2)}` : `${fmt(Math.round(v))} ${cur}`);
+    const vnd = v => { const d = v * fx; return d >= 1e6 ? `${(d / 1e6).toFixed(2).replace('.', ',')} tr ₫` : `${fmt(Math.round(d / 1000))}k ₫`; };
+    const sum = (list, k) => list.reduce((s, a) => s + a[k], 0);
+    const leadsOf = list => list.filter(a => isLeadType(a.resultType)).reduce((s, a) => s + a.results, 0);
+    const spend = sum(ads, 'spend'), leads = leadsOf(ads);
+    // Click / CTR / CPC chỉ tính chiến dịch ra lead — chiến dịch ThruPlay không tối ưu cho click
+    const leadCamps = new Set(ads.filter(a => isLeadType(a.resultType)).map(a => a.campaign));
+    const leadAds = leadCamps.size ? ads.filter(a => leadCamps.has(a.campaign)) : ads;
+    const clicks = sum(leadAds, 'clicks'), impr = sum(leadAds, 'impressions');
+
+    // Đăng ký đến từ quảng cáo: kênh Facebook/Instagram + utm_campaign khớp tên chiến dịch quảng cáo
+    const camps = [...new Set(ads.map(a => normKey(a.campaign)))];
+    const utmList = adsCfg().utmCampaigns;
+    const fromAds = r => META_SOURCES.includes(r.source) && (utmList
+      ? utmList.some(u => normKey(u) === normKey(r.campaign))
+      : normKey(r.campaign).length >= 4 && camps.some(c => c.includes(normKey(r.campaign))));
+    const regs = base.filter(fromAds);
+    const utms = [...new Set(regs.map(r => r.campaign))];
+
+    const starts = ads.map(a => a.reportStart).filter(Boolean), ends = ads.map(a => a.reportEnd).filter(Boolean);
+    const period = starts.length && ends.length ? `${dayLabel(new Date(Math.min(...starts)))} – ${dayLabel(new Date(Math.max(...ends)))}` : '';
+    const per = (a, b) => (b ? money(a / b) : '—');
+
+    const tiles = `<div class="kpis k5">
+      ${kpi('Đã chi tiêu', money(spend), [period, fx ? `≈ ${vnd(spend)}` : '', `${ads.length} quảng cáo`].filter(Boolean).join(' · '))}
+      ${kpi('Lead theo Meta', fmt(leads), leads ? `${per(spend, leads)} mỗi lead` : 'chưa có lead')}
+      ${kpi('Đăng ký từ quảng cáo', fmt(regs.length), regs.length ? `${per(spend, regs.length)} mỗi đăng ký${utms.length ? ` · utm ${utms.map(esc).join(', ')}` : ''}` : 'chưa khớp được utm_campaign')}
+      ${kpi('Chi phí / mọi đăng ký', per(spend, base.length), `chia cho ${fmt(base.length)} đăng ký mọi kênh`)}
+      ${kpi('Click vào liên kết', fmt(clicks), `CTR ${impr ? ((clicks * 100) / impr).toFixed(2) : 0}% · CPC ${per(sum(leadAds, 'spend'), clicks)}`)}
+    </div>`;
+
+    const group = (list, keyFn) => {
+      const m = new Map();
+      for (const a of list) {
+        const k = keyFn(a) || UNKNOWN;
+        if (!m.has(k)) m.set(k, []);
+        m.get(k).push(a);
+      }
+      return [...m].map(([label, g]) => ({ label, spend: sum(g, 'spend'), clicks: sum(g, 'clicks'), impr: sum(g, 'impressions'), leads: leadsOf(g), g }))
+        .sort((x, y) => y.spend - x.spend);
+    };
+    const table = (items, first, resultCol) => {
+      const ok = items.filter(i => i.leads >= 3);
+      const best = ok.length > 1 ? ok.reduce((b, i) => (i.spend / i.leads < b.spend / b.leads ? i : b)) : null;
+      const maxSpend = Math.max(...items.map(i => i.spend), 0.01);
+      return `<div class="tbl-wrap"><table class="tbl tbl-cards ads-tbl"><thead><tr><th>${first}</th><th class="n">Chi tiêu</th><th class="n">${resultCol}</th><th class="n">Chi phí / ${resultCol.toLowerCase()}</th><th class="n">Click</th><th class="n">CTR</th></tr></thead><tbody>
+        ${items.map(i => {
+          const res = resultCol === 'Lead' ? i.leads : i.g.reduce((s, a) => s + a.results, 0);
+          const type = resultCol === 'Lead' ? '' : [...new Set(i.g.map(a => a.resultType).filter(Boolean))].join(', ');
+          return `<tr><td class="ch"><b>${esc(i.label)}</b>${i === best ? ' <span class="pill ok">rẻ nhất</span>' : ''}${type ? `<small class="sub">${esc(type)}</small>` : ''}
+            <div class="mini"><i style="width:${(i.spend / maxSpend) * 100}%"></i></div></td>
+            <td class="n" data-label="Chi tiêu">${money(i.spend)}</td>
+            <td class="n" data-label="${resultCol}">${res ? fmt(res) : '—'}</td>
+            <td class="n" data-label="Chi phí / ${resultCol.toLowerCase()}">${res ? money(i.spend / res) : '—'}</td>
+            <td class="n" data-label="Click">${i.clicks ? fmt(i.clicks) : '—'}</td>
+            <td class="n" data-label="CTR">${i.impr && i.clicks ? `${((i.clicks * 100) / i.impr).toFixed(2)}%` : '—'}</td></tr>`;
+        }).join('')}</tbody></table></div>`;
+    };
+    const note = `Meta đếm <b>${fmt(leads)}</b> lead, Sheet ghi nhận <b>${fmt(regs.length)}</b> đăng ký có utm khớp chiến dịch. Chênh lệch nhỏ là bình thường (người bấm gửi nhiều lần, chặn cookie, đổi thiết bị). Số liệu quảng cáo là luỹ kế theo kỳ báo cáo của tab “${esc(adsCfg().sheetName)}”, không áp dụng bộ lọc phía trên.`;
+    const body = `${tiles}
+      <div class="grid g2" style="margin-top:16px">
+        ${card('Theo chiến dịch', 'Mỗi chiến dịch tối ưu cho một loại kết quả khác nhau', table(group(ads, a => a.campaign), 'Chiến dịch', 'Kết quả'), 'span2')}
+        ${card('Theo nhóm quảng cáo (đối tượng)', 'Chỉ tính chiến dịch ra lead · “rẻ nhất” = chi phí / lead thấp nhất, từ 3 lead trở lên', table(group(leadAds, a => a.adset), 'Nhóm quảng cáo', 'Lead'))}
+        ${card('Theo mẫu quảng cáo (nội dung)', 'Gộp cùng một mẫu chạy ở nhiều nhóm · chỉ tính chiến dịch ra lead', table(group(leadAds, a => a.ad), 'Mẫu quảng cáo', 'Lead'))}
+      </div>
+      <div class="note">${note}</div>`;
+    return section(3, 'Quảng cáo Facebook', desc, body);
+  }
+
   function sectionWho(rows) {
     const n = rows.length;
     const order = CFG.order;
@@ -866,7 +994,7 @@
       ${card('Ma trận: Kinh nghiệm quản lý × Quy mô đội', 'Ô đậm = nhóm đông nhất. Góc trên-trái là “quản lý mới, đội nhỏ”; góc dưới-phải là “quản lý lâu năm, đội lớn”.',
         matrix(expItems.map(i => ({ label: i.label })), teamItems.map(i => ({ label: i.label })), (e, t) => rows.filter(r => (r.mgmtExp || UNKNOWN) === e && (r.teamSize || UNKNOWN) === t).length), 'span2')}
     </div>`;
-    return section(3, 'Họ là ai', 'Cấp bậc, độ tuổi, kinh nghiệm và quy mô đội nhóm', body);
+    return section(4, 'Họ là ai', 'Cấp bậc, độ tuổi, kinh nghiệm và quy mô đội nhóm', body);
   }
 
   function sectionWork(rows) {
@@ -881,7 +1009,7 @@
       ${card('Lĩnh vực đang hoạt động', indHint, barList(toItems(countBy(rows, r => r.industries)), { total: n, limit: 14 }))}
       ${card('Lĩnh vực × Vị trí', 'Top lĩnh vực theo cấp bậc', matrix(posXind.map(i => ({ label: i.label })), positions.map(i => ({ label: i.label })), (ind, pos) => rows.filter(r => r.industries.includes(ind) && (r.position || UNKNOWN) === pos).length))}
     </div>`;
-    return section(4, 'Họ đang làm gì', 'Ngành nghề và cấp bậc theo từng ngành', body);
+    return section(5, 'Họ đang làm gì', 'Ngành nghề và cấp bậc theo từng ngành', body);
   }
 
   function sectionConcerns(rows) {
@@ -928,7 +1056,7 @@
         <label class="hint" style="margin:0">Xem theo&nbsp;<select data-matrix>${Object.entries(dims).map(([k, d]) => `<option value="${k}"${k === state.matrixDim ? ' selected' : ''}>${d.label}</option>`).join('')}</select></label></div>${mx}</div>
       <div class="card span2" id="questions">${questionsBlock(rows)}</div>
     </div>`;
-    return section(5, 'Họ bận tâm điều gì', 'Phân tích câu hỏi / khó khăn học viên gửi về', body);
+    return section(6, 'Họ bận tâm điều gì', 'Phân tích câu hỏi / khó khăn học viên gửi về', body);
   }
 
   const qStep = () => (isNarrow() ? 5 : 10);
@@ -986,7 +1114,7 @@
       <li><span>Thiếu utm_campaign</span><b>${noCamp}</b></li>
       <li><span>Câu hỏi trống / “chưa có”</span><b>${rows.filter(r => r.noConcern).length}</b></li>
     </ul><div class="note">Mẹo: dùng link có <b>utm_campaign</b> riêng cho từng bài đăng / nhóm Zalo / email để biết chính xác bài nào hiệu quả.</div>`;
-    return section(6, 'Consent & chất lượng dữ liệu', isEvent ? '' : 'Toàn chuỗi', `<div class="grid g2">${card('Tình trạng consent form', '', consentBody)}${card('Chất lượng dữ liệu', 'Các điểm cần làm sạch trước khi gửi email / chia nhóm', dq)}</div>`);
+    return section(7, 'Consent & chất lượng dữ liệu', isEvent ? '' : 'Toàn chuỗi', `<div class="grid g2">${card('Tình trạng consent form', '', consentBody)}${card('Chất lượng dữ liệu', 'Các điểm cần làm sạch trước khi gửi email / chia nhóm', dq)}</div>`);
   }
 
   function mountCharts(rows, isEvent) {

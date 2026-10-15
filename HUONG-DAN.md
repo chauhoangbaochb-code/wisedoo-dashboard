@@ -43,10 +43,18 @@ Ghi chú:
 | So sánh sự kiện (tab Tổng quan) | Sự kiện nào hút người hơn, tốc độ đăng ký, chân dung khác nhau ra sao |
 | 1. Nhịp đăng ký | Đăng ký theo ngày (theo kênh), luỹ kế, heatmap giờ × thứ, buổi được chọn |
 | 2. Họ đến từ đâu | Kênh, chiến dịch (UTM), **chất lượng theo kênh**, vị trí địa lý (khi form có trường này) |
-| 3. Họ là ai | Cấp bậc, độ tuổi, kinh nghiệm quản lý, quy mô đội, ma trận kinh nghiệm × quy mô đội |
-| 4. Họ đang làm gì | Lĩnh vực (đã gộp cách viết khác nhau), lĩnh vực × cấp bậc |
-| 5. Họ bận tâm điều gì | Nhóm vấn đề (tự phân loại), word cloud, vấn đề × kinh nghiệm/vị trí/tuổi/kênh, danh sách câu hỏi ẩn danh |
-| 6. Consent & chất lượng dữ liệu | Tỉ lệ consent, trùng lặp, thiếu dữ liệu |
+| 3. Quảng cáo Facebook | Đã chi, lead theo Meta, đăng ký thực từ quảng cáo, chi phí / đăng ký, hiệu quả theo chiến dịch · nhóm quảng cáo · mẫu quảng cáo |
+| 4. Họ là ai | Cấp bậc, độ tuổi, kinh nghiệm quản lý, quy mô đội, ma trận kinh nghiệm × quy mô đội |
+| 5. Họ đang làm gì | Lĩnh vực (đã gộp cách viết khác nhau), lĩnh vực × cấp bậc |
+| 6. Họ bận tâm điều gì | Nhóm vấn đề (tự phân loại), word cloud, vấn đề × kinh nghiệm/vị trí/tuổi/kênh, danh sách câu hỏi ẩn danh |
+| 7. Consent & chất lượng dữ liệu | Tỉ lệ consent, trùng lặp, thiếu dữ liệu |
+
+## Chi phí quảng cáo (tab "Facebook Ads")
+1. **Cài một lần:** làm theo 3 bước ở đầu file `apps-script/Ads.gs` (thêm file Ads, thêm dòng `ads: readAdsSheet_(),` vào doGet, deploy bản mới).
+2. **Cập nhật số liệu:** Trình quản lý quảng cáo → chọn khoảng ngày → Xuất bảng → dán đè vào tab "Facebook Ads" (giữ nguyên dòng tiêu đề). Dashboard tự nhận trong vòng 1 phút.
+3. **Ghép quảng cáo với sự kiện:** chiến dịch có tên chứa tên sự kiện (vd. `MCDelegation_Leads_Web` → Delegation) được tự gắn. Đặt tên khác → khai báo ở `config.js → ads.eventOf`.
+4. **Đăng ký thực từ quảng cáo:** đếm người có `utm_source=facebook` và `utm_campaign` nằm trong tên chiến dịch (vd. `mc_delegation`). Nên điền ở phần URL parameters của quảng cáo: `utm_source=facebook&utm_campaign=mc_delegation`.
+5. Số liệu quảng cáo hiện ở mục 3 của dashboard; ai mở được dashboard đều xem được chi tiêu.
 
 ## Mục tiêu đăng ký cho từng buổi
 - Mặc định mỗi buổi là `defaultTarget` trong `config.js` (đang để 100).
