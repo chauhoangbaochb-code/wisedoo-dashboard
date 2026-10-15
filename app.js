@@ -206,6 +206,7 @@
     let data;
     try { data = await res.json(); } catch (e) { throw new Error('Apps Script không trả về JSON — kiểm tra quyền truy cập Web App là "Anyone"'); }
     state.summaries = data.summaries || {};
+    state.targets = data.targets || {};
     const adsName = keyOf(adsCfg().sheetName);
     const adsSheet = (data.sheets || []).find(sh => keyOf(sh.name) === adsName);
     state.ads = parseAds((data.ads && data.ads.rows) || (adsSheet && adsSheet.rows) || null);
@@ -278,7 +279,7 @@
     q: { theme: null, word: null, hideEmpty: true, limit: 0, onlyHl: false, sort: 'ts', dir: -1 },
     hl: loadHl(),
     matrixDim: 'mgmtExp', peopleMatrix: 'expTeam', pendingQ: false,
-    summaries: {}, ads: null,
+    summaries: {}, ads: null, targets: {},
     lastFetch: null, lastHash: null, knownIds: null, error: null, loading: false,
     sourceColor: new Map(), eventColor: new Map(),
   };
@@ -328,7 +329,7 @@
         for (const r of rows) { const rec = toRecord(r, src.columns || CFG.columns, src); if (rec) recs.push(rec); }
       }
       recs.sort((a, b) => a.ts - b.ts);
-      raw += JSON.stringify(state.summaries) + JSON.stringify(state.ads);
+      raw += JSON.stringify(state.summaries) + JSON.stringify(state.ads) + JSON.stringify(state.targets);
       state.lastFetch = new Date(); state.error = null;
       const h = hashStr(raw);
       if (h !== state.lastHash) {
@@ -520,15 +521,38 @@
   }
 
   /* ---------------- tóm tắt đầu trang: thẻ buổi + KPI ---------------- */
-  // Mục tiêu mỗi buổi: số nhập trên dashboard (lưu trong trình duyệt) → config.js → mặc định
+  // Mục tiêu mỗi buổi: số nhập trên dashboard (lưu chung trong tab "MUC_TIEU" của Sheet qua Apps Script)
+  // → config.js → mặc định. Chưa dùng Apps Script thì đành lưu trong trình duyệt của người nhập.
   const TARGET_KEY = 'wd-target:';
   function sessionTarget(ev, label) {
-    try { const v = parseInt(localStorage.getItem(`${TARGET_KEY}${ev}|${label}`), 10); if (v > 0) return v; } catch (e) { /* trình duyệt chặn lưu trữ */ }
+    const key = `${ev}|${label}`;
+    if (state.targets[key] > 0) return state.targets[key];
+    if (!CFG.appsScriptUrl) {
+      try { const v = parseInt(localStorage.getItem(TARGET_KEY + key), 10); if (v > 0) return v; } catch (e) { /* trình duyệt chặn lưu trữ */ }
+    }
     const conf = (CFG.events && CFG.events[ev]) || {};
     return (conf.targets && conf.targets[label]) || conf.target || CFG.defaultTarget || 100;
   }
-  function saveTarget(ev, label, v) {
-    try { localStorage.setItem(`${TARGET_KEY}${ev}|${label}`, String(v)); } catch (e) { /* trình duyệt chặn lưu trữ */ }
+  async function saveTarget(ev, label, v) {
+    const key = `${ev}|${label}`;
+    if (!CFG.appsScriptUrl) {
+      try { localStorage.setItem(TARGET_KEY + key, String(v)); } catch (e) { /* trình duyệt chặn lưu trữ */ }
+      render(true); return;
+    }
+    const prev = state.targets[key];
+    state.targets[key] = v; render(true);   // hiện ngay, lưu ngầm
+    try {
+      // text/plain để trình duyệt không gửi preflight CORS — Apps Script không trả lời OPTIONS
+      const res = await fetch(CFG.appsScriptUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'setTarget', key, target: v }) });
+      let out = {};
+      try { out = await res.json(); } catch (e) { throw new Error('Apps Script chưa có hàm lưu mục tiêu — cập nhật Code.gs bản mới'); }
+      if (!out.ok) throw new Error(out.error || 'lỗi không rõ');
+      toast(`Đã lưu mục tiêu ${fmt(v)} người — cả team đều thấy`);
+    } catch (e) {
+      if (prev) state.targets[key] = prev; else delete state.targets[key];
+      render(true);
+      toast(`Không lưu được mục tiêu: ${e.message}`);
+    }
   }
 
   function sessionsOf(base) {
@@ -790,7 +814,8 @@
     const repeat = [...perPerson.values()].filter(s => s.size >= 2).length;
     const span = n ? Math.max(1, Math.round((startOfDay(new Date()) - startOfDay(rows[0].ts)) / DAY) + 1) : 1;
     return sessionCards(state.all, rows, true)
-      + headKpis(rows, `${fmt(people.size)} người duy nhất${repeat ? ` · ${fmt(repeat)} người đi ≥ 2 sự kiện` : ''}`, span, costKpi(state.all, false));
+      + headKpis(rows, `${fmt(people.size)} người duy nhất${repeat ? ` · ${fmt(repeat)} người đi ≥ 2 sự kiện` : ''}`, span, costKpi(state.all, false))
+      + budgetCard(state.all, false);
   }
 
   function compareTable() {
@@ -830,7 +855,8 @@
     const span = n ? Math.max(1, Math.round((startOfDay(new Date(Math.min(Date.now(), start ? +start : Date.now()))) - startOfDay(rows[0].ts)) / DAY) + 1) : 1;
     const dup = duplicates(rows);
     return sessionCards(base, rows, false)
-      + headKpis(rows, dup ? `${fmt(n - dup)} người · gộp ${fmt(dup)} lượt trùng` : 'Không có lượt trùng', span, costKpi(base, true));
+      + headKpis(rows, dup ? `${fmt(n - dup)} người · gộp ${fmt(dup)} lượt trùng` : 'Không có lượt trùng', span, costKpi(base, true))
+      + budgetCard(base, true);
   }
 
   // Biểu đồ đăng ký theo ngày + kênh / mối bận tâm hàng đầu — phần "nhìn nhanh" của tab Tổng quan
@@ -972,6 +998,60 @@
     return regs.length
       ? kpi('Chi phí / 1 đăng ký', adsMoney(spend / regs.length), `${adsMoney(spend)} ÷ ${fmt(regs.length)} người từ quảng cáo`)
       : kpi('Chi phí / 1 đăng ký', base.length ? adsMoney(spend / base.length) : '—', `${adsMoney(spend)} ÷ ${fmt(base.length)} đăng ký mọi kênh`);
+  }
+
+  // Ngân sách quảng cáo cần thêm để các buổi sắp tới đạt mục tiêu
+  const CPA_KEY = 'wd-cpa:';
+  function savedCpa(scope) { try { const v = parseFloat(localStorage.getItem(CPA_KEY + scope)); return v > 0 ? v : null; } catch (e) { return null; } }
+  function saveCpa(scope, v) { try { if (v > 0) localStorage.setItem(CPA_KEY + scope, String(v)); else localStorage.removeItem(CPA_KEY + scope); } catch (e) { /* trình duyệt chặn lưu trữ */ } }
+
+  function budgetCard(base, isEvent) {
+    const ads = adsOf(isEvent);
+    if (!ads.length || !base.length) return '';
+    const { spend, regs } = adsStats(base, ads);
+    if (!regs.length) return '';
+    const now = Date.now();
+    const sess = sessionsOf(base).filter(s => +s.end > now);
+    if (!sess.length) return '';
+    const scope = isEvent ? state.route.event : '__all__';
+    const count = s => base.filter(r => r.event === s.event && r.session.label === s.label).length;
+    const target = sess.reduce((t, s) => t + sessionTarget(s.event, s.label), 0);
+    const have = sess.reduce((t, s) => t + count(s), 0);
+    const gap = sess.reduce((t, s) => t + Math.max(0, sessionTarget(s.event, s.label) - count(s)), 0);
+    const daysLeft = Math.max(1, Math.ceil((Math.max(...sess.map(s => +s.start)) - now) / DAY));
+    // nhịp đăng ký KHÔNG qua quảng cáo trong 7 ngày gần nhất
+    const fromAds = new Set(regs);
+    const opened = Math.max(1, Math.ceil((now - base[0].ts) / DAY));
+    const orgPerDay = base.filter(r => !fromAds.has(r) && now - r.ts < 7 * DAY).length / Math.min(7, opened);
+    const organic = Math.min(gap, Math.round(orgPerDay * daysLeft));
+    const needAds = Math.max(0, gap - organic);
+    const cpaActual = spend / regs.length;
+    const cpa = savedCpa(scope) || cpaActual;
+    const budget = needAds * cpa;
+    const fx = adsCfg().fxRate;
+    const vnd = v => (fx ? ` <small>≈ ${fmt(Math.round((v * fx) / 1000))}k ₫</small>` : '');
+    const main = gap === 0
+      ? `<div class="bg-big ok">Đã đủ mục tiêu</div><div class="bg-sub">Các buổi sắp tới đã đạt ${fmt(have)}/${fmt(target)} người — không cần thêm ngân sách để đạt KPI.</div>`
+      : needAds === 0
+        ? `<div class="bg-big ok">$0</div><div class="bg-sub">Với nhịp đăng ký tự nhiên hiện tại (~${orgPerDay.toFixed(1)}/ngày), các buổi có thể đạt mục tiêu mà không cần thêm quảng cáo.</div>`
+        : `<div class="bg-big">${adsMoney(budget)}${vnd(budget)}</div>
+           <div class="bg-sub">≈ <b>${adsMoney(budget / daysLeft)}/ngày</b>${vnd(budget / daysLeft)} trong ${daysLeft} ngày còn lại · tổng cả chiến dịch ≈ <b>${adsMoney(spend + budget)}</b> (đã chi ${adsMoney(spend)})</div>`;
+    return `<div class="card budget">
+      <div class="bg-main">
+        <div class="bg-label">Ngân sách quảng cáo cần thêm để đạt mục tiêu</div>
+        ${main}
+        <label class="bg-cpa">Chi phí / 1 đăng ký giả định
+          <input type="number" min="0" step="0.01" inputmode="decimal" value="${cpa.toFixed(2)}" data-cpa="${esc(scope)}" aria-label="Chi phí cho mỗi đăng ký từ quảng cáo">
+          <span>thực tế ${adsMoney(cpaActual)}${savedCpa(scope) ? ` · <button type="button" data-cpa-reset="${esc(scope)}">dùng số thực tế</button>` : ''}</span></label>
+      </div>
+      <ol class="bg-steps">
+        <li><span>Mục tiêu ${sess.length} buổi sắp tới</span><b>${fmt(target)}</b></li>
+        <li><span>Đã đăng ký</span><b>${fmt(have)}</b></li>
+        <li><span>Còn thiếu <small>(tính riêng từng buổi)</small></span><b>${fmt(gap)}</b></li>
+        <li><span>Dự kiến tự đến, không qua quảng cáo <small>${orgPerDay.toFixed(1)}/ngày × ${daysLeft} ngày</small></span><b>−${fmt(organic)}</b></li>
+        <li class="tot"><span>Cần từ quảng cáo × chi phí / đăng ký</span><b>${fmt(needAds)} × ${adsMoney(cpa)}</b></li>
+      </ol>
+    </div>`;
   }
 
   function sectionAds(base, isEvent) {
@@ -1247,6 +1327,8 @@
       state.q.dir = state.q.sort === k ? -state.q.dir : (k === 'ts' ? -1 : 1);
       state.q.sort = k; rerenderKeep(false); return;
     }
+    const cpaReset = e.target.closest('[data-cpa-reset]');
+    if (cpaReset) { saveCpa(cpaReset.dataset.cpaReset, 0); rerenderKeep(false); return; }
     const del = e.target.closest('[data-hl-del]');
     if (del) { state.hl.splice(+del.dataset.hlDel, 1); saveHl(); rerenderKeep(false); return; }
     if (e.target.closest('[data-hl-clear]')) { state.hl = []; state.q.onlyHl = false; saveHl(); rerenderKeep(false); return; }
@@ -1277,12 +1359,13 @@
   view.addEventListener('change', e => {
     if (e.target.matches('[data-matrix]')) { state.matrixDim = e.target.value; rerenderKeep(false); }
     if (e.target.matches('[data-pmatrix]')) { state.peopleMatrix = e.target.value; rerenderKeep(false); }
+    if (e.target.dataset.cpa) { saveCpa(e.target.dataset.cpa, parseFloat(e.target.value)); rerenderKeep(false); }
     if (e.target.id === 'hideEmpty') { state.q.hideEmpty = e.target.checked; rerenderKeep(false); }
     if (e.target.id === 'onlyHl') { state.q.onlyHl = e.target.checked; rerenderKeep(false); }
     if (e.target.dataset.targetEv) {
       const v = parseInt(e.target.value, 10);
-      if (v > 0) saveTarget(e.target.dataset.targetEv, e.target.dataset.targetLabel, v);
-      rerenderKeep(false);
+      if (v > 0 && v !== sessionTarget(e.target.dataset.targetEv, e.target.dataset.targetLabel)) saveTarget(e.target.dataset.targetEv, e.target.dataset.targetLabel, v);
+      else rerenderKeep(false);
     }
   });
   $('#filters').addEventListener('change', e => {

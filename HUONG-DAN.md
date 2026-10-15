@@ -59,7 +59,8 @@ Link có thể trỏ thẳng tới một tab, ví dụ `#/event/Delegation/marke
 ## Mục tiêu đăng ký cho từng buổi
 - Mặc định mỗi buổi là `defaultTarget` trong `config.js` (đang để 100).
 - Đặt riêng cho sự kiện / từng buổi: thêm `target` hoặc `targets` vào `events` trong `config.js` (có ví dụ trong file) — áp dụng cho cả team.
-- Gõ trực tiếp vào ô "Mục tiêu" trên thẻ buổi: chỉ lưu trên trình duyệt của người gõ, người khác không thấy.
+- Gõ trực tiếp vào ô "Mục tiêu" trên thẻ buổi rồi Enter: lưu vào tab **"MUC_TIEU"** trong Sheet, cả team cùng thấy (cần Code.gs có hàm `doPost`). Sửa / xoá trực tiếp trong tab đó cũng được.
+- Card **"Ngân sách quảng cáo cần thêm"** (tab Tổng quan) tính từ mục tiêu này: còn thiếu − dự kiến tự đến (nhịp 7 ngày qua của các kênh không phải quảng cáo) = cần từ quảng cáo × chi phí / đăng ký. Ô "chi phí / đăng ký giả định" để thử kịch bản, chỉ lưu trên trình duyệt của người nhập.
 
 ## Tinh chỉnh phân loại câu hỏi
 Trong `config.js` → `themes`: thêm/bớt từ khoá cho từng nhóm vấn đề. Câu hỏi không khớp nhóm nào sẽ vào "Khác / chưa phân loại". Xem nhóm này để biết cần bổ sung từ khoá gì.

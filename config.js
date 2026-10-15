@@ -42,7 +42,7 @@ window.DASHBOARD_CONFIG = {
   },
 
   // Mục tiêu số người đăng ký mặc định cho mỗi buổi (thẻ buổi ở đầu trang).
-  // Ô "Mục tiêu" trên dashboard ghi đè số này — chỉ lưu trên trình duyệt của người nhập.
+  // Ô "Mục tiêu" trên dashboard ghi đè số này và lưu vào tab "MUC_TIEU" trong Sheet — cả team cùng thấy.
   defaultTarget: 100,
 
   // Chi phí quảng cáo — đọc tab xuất từ Trình quản lý quảng cáo Meta (cần apps-script/Ads.gs).
