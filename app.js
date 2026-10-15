@@ -75,15 +75,17 @@
 
   function parseSession(s) {
     s = clean(s);
-    if (!s) return { label: '', date: null, time: '' };
+    if (!s) return { label: '', date: null, end: null, time: '' };
     const d = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
     const t = /(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/.exec(s);
-    let date = null;
+    let date = null, end = null;
     if (d) {
       const [hh, mm] = t ? t[1].split(':').map(Number) : [0, 0];
       date = new Date(+d[3], d[2] - 1, +d[1], hh, mm);
+      if (t) { const [eh, em] = t[2].split(':').map(Number); end = new Date(+d[3], d[2] - 1, +d[1], eh, em); }
+      else end = new Date(+d[3], d[2] - 1, +d[1] + 1);
     }
-    return { label: s, date, time: t ? `${t[1]}–${t[2]}` : '' };
+    return { label: s, date, end, time: t ? `${t[1]}–${t[2]}` : '' };
   }
 
   function canonOrdered(v, list) {
@@ -455,6 +457,76 @@
     return `<div class="kpi${hero ? ' hero' : ''}"><div class="k-label">${label}</div><div class="k-value">${value}</div>${sub ? `<div class="k-sub">${sub}</div>` : ''}</div>`;
   }
 
+  /* ---------------- tóm tắt đầu trang: thẻ buổi + KPI ---------------- */
+  // Mục tiêu mỗi buổi: số nhập trên dashboard (lưu trong trình duyệt) → config.js → mặc định
+  const TARGET_KEY = 'wd-target:';
+  function sessionTarget(ev, label) {
+    try { const v = parseInt(localStorage.getItem(`${TARGET_KEY}${ev}|${label}`), 10); if (v > 0) return v; } catch (e) { /* trình duyệt chặn lưu trữ */ }
+    const conf = (CFG.events && CFG.events[ev]) || {};
+    return (conf.targets && conf.targets[label]) || conf.target || CFG.defaultTarget || 100;
+  }
+  function saveTarget(ev, label, v) {
+    try { localStorage.setItem(`${TARGET_KEY}${ev}|${label}`, String(v)); } catch (e) { /* trình duyệt chặn lưu trữ */ }
+  }
+
+  function sessionsOf(base) {
+    const m = new Map();
+    for (const r of base) {
+      if (!r.session.date) continue;
+      const k = `${r.event}|${r.session.label}`;
+      if (!m.has(k)) m.set(k, { event: r.event, label: r.session.label, start: r.session.date, end: r.session.end, time: r.session.time });
+    }
+    return [...m.values()].sort((a, b) => a.start - b.start);
+  }
+
+  function countdownHtml(start, end) {
+    const now = Date.now();
+    if (now >= end) return '<span class="cd-done">Đã diễn ra</span>';
+    if (now >= start) return '<span class="cd-live">● Đang diễn ra</span>';
+    const ms = start - now, d = Math.floor(ms / DAY), h = Math.floor((ms % DAY) / 3600000), mi = Math.floor((ms % 3600000) / 60000);
+    return d > 0 ? `Còn <b>${d}</b> ngày ${h} giờ` : `Còn <b>${h}</b> giờ ${mi} phút`;
+  }
+
+  function sessionCards(base, rows, multi) {
+    let list = sessionsOf(base);
+    if (state.filters.session) list = list.filter(s => s.label === state.filters.session);
+    if (multi) { const upcoming = list.filter(s => +s.end > Date.now()); if (upcoming.length) list = upcoming; }
+    if (!list.length) return '';
+    return `<div class="sessions">${list.map(s => {
+      const n = rows.filter(r => r.event === s.event && r.session.label === s.label).length;
+      const target = sessionTarget(s.event, s.label);
+      const p = pct(n, target);
+      const d = s.start;
+      return `<div class="sess${+s.end <= Date.now() ? ' past' : ''}">
+        <div class="sess-top">
+          <div class="cal"><div class="cal-m">Tháng ${d.getMonth() + 1}</div><div class="cal-d">${d.getDate()}</div><div class="cal-w">${DOW[d.getDay()]}</div></div>
+          <div class="sess-info">
+            ${multi ? `<div class="sess-ev">${esc(eventTitle(s.event))}</div>` : ''}
+            <h3>${s.time ? `${s.time.replace('–', ' đến ')}, ` : ''}${DOW[d.getDay()]} ${dayLabel(d)}</h3>
+            <p class="s-cd" data-start="${+s.start}" data-end="${+s.end}">${countdownHtml(+s.start, +s.end)}</p>
+            <p class="s-n"><b>${fmt(n)}</b> người đăng ký</p>
+          </div>
+        </div>
+        <div class="s-track" data-tip="${fmt(n)}/${fmt(target)} người"><div class="s-fill${p >= 100 ? ' done' : ''}" style="width:${Math.min(100, p)}%"></div></div>
+        <div class="s-foot"><span>Đạt ${p}% mục tiêu</span>
+          <label>Mục tiêu <input type="number" min="1" step="1" inputmode="numeric" value="${target}" data-target-ev="${esc(s.event)}" data-target-label="${esc(s.label)}" aria-label="Mục tiêu số người đăng ký"> người</label></div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  function headKpis(rows, heroSub, span) {
+    const n = rows.length, now = Date.now();
+    const w7 = rows.filter(r => now - r.ts < 7 * DAY).length;
+    const mg = rows.filter(isManaging).length;
+    return `<div class="kpis k5">
+      ${kpi('Tổng lượt đăng ký', fmt(n), heroSub, true)}
+      ${kpi('Trong 24 giờ qua', fmt(last24(rows).cur), 'đăng ký mới')}
+      ${kpi('Trong 7 ngày qua', fmt(w7), `bình quân ${(w7 / Math.min(7, span)).toFixed(1)} mỗi ngày`)}
+      ${kpi('Bình quân từ ngày mở', (n / span).toFixed(1), `mỗi ngày, qua ${span} ngày`)}
+      ${kpi('Đang phụ trách người', `${pct(mg, n)}%`, `${fmt(mg)} người có nhóm riêng`)}
+    </div>`;
+  }
+
   /* ---------------- charts (Chart.js) ---------------- */
   function chartBase() {
     return {
@@ -646,16 +718,9 @@
     const perPerson = new Map();
     for (const r of state.all) { if (!perPerson.has(r.personKey)) perPerson.set(r.personKey, new Set()); perPerson.get(r.personKey).add(r.event); }
     const repeat = [...perPerson.values()].filter(s => s.size >= 2).length;
-    const l = last24(rows);
-    const consent = rows.filter(r => r.consent === 'yes').length;
-    let html = `<div class="kpis">
-      ${kpi('Tổng lượt đăng ký', fmt(n), `${state.events.length} sự kiện trong chuỗi`, true)}
-      ${kpi('Người duy nhất', fmt(people.size), 'gộp trùng theo email/SĐT')}
-      ${kpi('Tham gia ≥ 2 sự kiện', fmt(repeat), repeat ? `${pct(repeat, people.size)}% học viên quay lại` : 'chưa có học viên quay lại')}
-      ${kpi('24 giờ qua', `+${l.cur}`, `24h trước đó: +${l.prev}`)}
-      ${kpi('Đang quản lý đội nhóm', `${pct(rows.filter(isManaging).length, n)}<small>%</small>`, 'có ít nhất 1 người phụ trách')}
-      ${kpi('Đồng ý consent', `${pct(consent, n)}<small>%</small>`, `${consent}/${n} người`)}
-    </div>`;
+    const span = n ? Math.max(1, Math.round((startOfDay(new Date()) - startOfDay(rows[0].ts)) / DAY) + 1) : 1;
+    let html = sessionCards(state.all, rows, true);
+    html += headKpis(rows, `${fmt(people.size)} người duy nhất${repeat ? ` · ${fmt(repeat)} người đi ≥ 2 sự kiện` : ''}`, span);
     html += aiSummaryBox('__overview__') + insightsBox(rows, 'overview');
     // event comparison table
     const trs = state.events.map(ev => {
@@ -691,21 +756,11 @@
 
   function eventHeader(rows, base) {
     const n = rows.length;
-    const { start, end } = eventDates(base);
-    const left = start ? Math.ceil((startOfDay(start) - startOfDay(new Date())) / DAY) : null;
-    const l = last24(rows);
+    const { start } = eventDates(base);
     const span = n ? Math.max(1, Math.round((startOfDay(new Date(Math.min(Date.now(), start ? +start : Date.now()))) - startOfDay(rows[0].ts)) / DAY) + 1) : 1;
-    const consent = rows.filter(r => r.consent === 'yes').length;
     const dup = duplicates(rows);
-    const sameDay = start && end && dayKey(start) === dayKey(end);
-    let html = `<div class="kpis">
-      ${kpi('Tổng đăng ký', fmt(n), dup ? `${n - dup} người (đã gộp ${dup} trùng)` : 'không có đăng ký trùng', true)}
-      ${kpi('24 giờ qua', `+${l.cur}`, `24h trước đó: +${l.prev}`)}
-      ${kpi('Đếm ngược', left == null ? '—' : left > 0 ? `${left}<small> ngày</small>` : left === 0 ? 'Hôm nay' : 'Đã diễn ra', start ? `${DOW[start.getDay()]} ${dayLabel(start)}${sameDay || !end ? '' : ` → ${DOW[end.getDay()]} ${dayLabel(end)}`}` : '')}
-      ${kpi('Trung bình / ngày', (n / span).toFixed(1), `trong ${span} ngày mở đăng ký`)}
-      ${kpi('Đang quản lý đội nhóm', `${pct(rows.filter(isManaging).length, n)}<small>%</small>`, `${pct(rows.filter(isSenior).length, n)}% có > 3 năm kinh nghiệm`)}
-      ${kpi('Đồng ý consent', `${pct(consent, n)}<small>%</small>`, `${consent}/${n} người`)}
-    </div>`;
+    let html = sessionCards(base, rows, false);
+    html += headKpis(rows, dup ? `${fmt(n - dup)} người · gộp ${fmt(dup)} lượt trùng` : 'Không có lượt trùng', span);
     return html + aiSummaryBox(state.route.event) + insightsBox(rows, 'event');
   }
 
@@ -969,6 +1024,11 @@
   view.addEventListener('change', e => {
     if (e.target.matches('[data-matrix]')) { state.matrixDim = e.target.value; rerenderKeep(false); }
     if (e.target.id === 'hideEmpty') { state.q.hideEmpty = e.target.checked; rerenderKeep(false); }
+    if (e.target.dataset.targetEv) {
+      const v = parseInt(e.target.value, 10);
+      if (v > 0) saveTarget(e.target.dataset.targetEv, e.target.dataset.targetLabel, v);
+      rerenderKeep(false);
+    }
   });
   $('#filters').addEventListener('change', e => {
     if (e.target.dataset.filter) { state.filters[e.target.dataset.filter] = e.target.value; render(true); }
@@ -999,6 +1059,7 @@
   // live refresh
   setInterval(() => { if (!document.hidden) load(); }, Math.max(15, CFG.refreshSeconds) * 1000);
   setInterval(setLive, 5000);
+  setInterval(() => document.querySelectorAll('.s-cd[data-start]').forEach(el => { el.innerHTML = countdownHtml(+el.dataset.start, +el.dataset.end); }), 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && state.lastFetch && Date.now() - state.lastFetch > 15000) load(); });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => state.all.length && render(true));
   window.matchMedia('(max-width: 640px)').addEventListener('change', () => state.all.length && render(true));

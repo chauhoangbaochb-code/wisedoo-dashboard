@@ -41,7 +41,13 @@ window.DASHBOARD_CONFIG = {
     // city: 13,     // bật khi form có trường Tỉnh/Thành phố (điền đúng số cột)
   },
 
+  // Mục tiêu số người đăng ký mặc định cho mỗi buổi (thẻ buổi ở đầu trang).
+  // Ô "Mục tiêu" trên dashboard ghi đè số này — chỉ lưu trên trình duyệt của người nhập.
+  defaultTarget: 100,
+
   // Tên hiển thị đẹp cho từng sự kiện (key = giá trị ở cột event). Không bắt buộc.
+  // Mục tiêu riêng: `target: 120` cho mọi buổi của sự kiện, hoặc
+  // `targets: { '19:30-21:00, T5 05/11/2026': 80 }` cho từng buổi (ghi đúng như cột "buổi" trong Sheet).
   events: {
     Delegation: { title: 'Delegation · Giao việc hiệu quả' },
   },

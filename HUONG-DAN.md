@@ -38,7 +38,8 @@ Ghi chú:
 ## Các phần trong dashboard
 | Phần | Trả lời câu hỏi |
 |---|---|
-| KPI + "Đọc nhanh" | Tổng quan và nhận định tự động trong 10 giây |
+| Thẻ buổi học | Mỗi buổi: ngày giờ, đếm ngược, số người đăng ký, % đạt mục tiêu (sửa mục tiêu ngay trên thẻ) |
+| KPI + "Đọc nhanh" | Tổng lượt, 24 giờ / 7 ngày qua, bình quân từ ngày mở, % đang phụ trách người + nhận định tự động |
 | So sánh sự kiện (tab Tổng quan) | Sự kiện nào hút người hơn, tốc độ đăng ký, chân dung khác nhau ra sao |
 | 1. Nhịp đăng ký | Đăng ký theo ngày (theo kênh), luỹ kế, heatmap giờ × thứ, buổi được chọn |
 | 2. Họ đến từ đâu | Kênh, chiến dịch (UTM), **chất lượng theo kênh**, vị trí địa lý (khi form có trường này) |
@@ -46,6 +47,11 @@ Ghi chú:
 | 4. Họ đang làm gì | Lĩnh vực (đã gộp cách viết khác nhau), lĩnh vực × cấp bậc |
 | 5. Họ bận tâm điều gì | Nhóm vấn đề (tự phân loại), word cloud, vấn đề × kinh nghiệm/vị trí/tuổi/kênh, danh sách câu hỏi ẩn danh |
 | 6. Consent & chất lượng dữ liệu | Tỉ lệ consent, trùng lặp, thiếu dữ liệu |
+
+## Mục tiêu đăng ký cho từng buổi
+- Mặc định mỗi buổi là `defaultTarget` trong `config.js` (đang để 100).
+- Đặt riêng cho sự kiện / từng buổi: thêm `target` hoặc `targets` vào `events` trong `config.js` (có ví dụ trong file) — áp dụng cho cả team.
+- Gõ trực tiếp vào ô "Mục tiêu" trên thẻ buổi: chỉ lưu trên trình duyệt của người gõ, người khác không thấy.
 
 ## Tinh chỉnh phân loại câu hỏi
 Trong `config.js` → `themes`: thêm/bớt từ khoá cho từng nhóm vấn đề. Câu hỏi không khớp nhóm nào sẽ vào "Khác / chưa phân loại". Xem nhóm này để biết cần bổ sung từ khoá gì.
