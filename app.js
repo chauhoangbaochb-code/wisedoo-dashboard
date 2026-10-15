@@ -261,6 +261,13 @@
     return state.events.find(ev => normKey(ev).length >= 3 && c.includes(normKey(ev))) || '';
   }
 
+  // #/[event/<tên>/]<tab>  —  tab trống = Tổng quan
+  const SUBS = [
+    { id: 'overview', label: 'Tổng quan', icon: '<path d="M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z"/>' },
+    { id: 'marketing', label: 'Marketing', icon: '<path d="M3 17l5-5 4 4 8-8"/><path d="M14 8h6v6"/>' },
+    { id: 'people', label: 'Học viên', icon: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>' },
+    { id: 'questions', label: 'Câu hỏi', icon: '<path d="M4 5h16v11H9l-5 4z"/><path d="M9 10h6"/>' },
+  ];
   /* ---------------- state ---------------- */
   const freshFilters = () => ({ source: '', position: '', mgmtExp: '', session: '' });
   const state = {
@@ -268,7 +275,7 @@
     route: readRoute(),
     filters: freshFilters(),
     q: { theme: null, word: null, hideEmpty: true, limit: 0 },
-    matrixDim: 'mgmtExp',
+    matrixDim: 'mgmtExp', peopleMatrix: 'expTeam', pendingQ: false,
     summaries: {}, ads: null,
     lastFetch: null, lastHash: null, knownIds: null, error: null, loading: false,
     sourceColor: new Map(), eventColor: new Map(),
@@ -276,9 +283,14 @@
   let charts = [];
 
   function readRoute() {
-    const h = decodeURIComponent(location.hash.replace(/^#/, ''));
-    return h.startsWith('/event/') ? { view: 'event', event: h.slice(7) } : { view: 'overview' };
+    const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(x => { try { return decodeURIComponent(x); } catch (e) { return x; } });
+    let i = 0;
+    const r = { view: 'overview', event: null, sub: 'overview' };
+    if (parts[0] === 'event' && parts[1]) { r.view = 'event'; r.event = parts[1]; i = 2; }
+    if (SUBS.some(t => t.id === parts[i])) r.sub = parts[i];
+    return r;
   }
+  const routeHash = (r, sub) => `#/${r.view === 'event' ? `event/${encodeURIComponent(r.event)}/` : ''}${sub && sub !== 'overview' ? sub : ''}`;
 
   function ingest(recs) {
     state.all = recs;
@@ -498,7 +510,7 @@
   }
 
   function section(num, title, desc, body) {
-    return `<section class="section"><div class="section-head"><h2><span class="num">${typeof num === 'number' ? `${num}.` : num}</span> ${title}</h2>${desc ? `<p>${desc}</p>` : ''}</div>${body}</section>`;
+    return `<section class="section"><div class="section-head"><h2>${num ? `<span class="num">${num}</span> ` : ''}${title}</h2>${desc ? `<p>${desc}</p>` : ''}</div>${body}</section>`;
   }
 
   function kpi(label, value, sub, hero) {
@@ -736,11 +748,18 @@
     if (act) $('#tabs').scrollLeft = act.offsetLeft - 16;
   }
 
+  function renderSubtabs() {
+    const r = state.route;
+    $('#subtabs').innerHTML = SUBS.map(t => `<a href="${routeHash(r, t.id)}" class="${r.sub === t.id ? 'active' : ''}"${r.sub === t.id ? ' aria-current="page"' : ''}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${t.icon}</svg>${t.label}</a>`).join('');
+  }
+
   function render(keepScroll) {
     const y = window.scrollY;
     charts.forEach(c => c.destroy()); charts = [];
-    if (state.route.view === 'event' && !state.byEvent.has(state.route.event)) state.route = { view: 'overview' };
+    if (state.route.view === 'event' && !state.byEvent.has(state.route.event)) state.route = { view: 'overview', event: null, sub: state.route.sub };
     renderTabs();
+    renderSubtabs();
     const isEvent = state.route.view === 'event';
     const base = isEvent ? state.byEvent.get(state.route.event) : state.all;
     renderFilters(base);
@@ -748,14 +767,13 @@
     $('#subtitle').textContent = isEvent ? eventTitle(state.route.event) : `Tổng quan chuỗi · ${state.events.length} sự kiện`;
     if (!state.all.length) { $('#view').innerHTML = '<div class="state"><h2>Chưa có đăng ký nào</h2><p>Sheet đang trống — dashboard sẽ tự cập nhật khi có dữ liệu.</p></div>'; return; }
 
-    let html = isEvent ? eventHeader(rows, base) : overviewHeader(rows);
-    html += sectionMomentum(rows, isEvent);
-    html += sectionSource(rows);
-    html += sectionAds(base, isEvent);
-    html += sectionWho(rows);
-    html += sectionWork(rows);
-    html += sectionConcerns(rows);
-    html += sectionOps(rows, isEvent);
+    let html;
+    switch (state.route.sub) {
+      case 'marketing': html = sectionMomentum(rows, isEvent) + sectionSource(rows) + sectionAds(base, isEvent); break;
+      case 'people': html = peopleTab(rows, isEvent); break;
+      case 'questions': html = aiSummaryBox(isEvent ? state.route.event : '__overview__') + sectionConcerns(rows); break;
+      default: html = (isEvent ? eventHeader(rows, base) : overviewHeader(rows)) + insightPanel(rows, isEvent ? 'event' : 'overview') + quickGrid(rows, isEvent) + (isEvent ? '' : compareTable());
+    }
     if (state.error) html = `<div class="err-box">Không cập nhật được lần gần nhất (${esc(state.error.message)}). Đang hiển thị dữ liệu cũ.</div>` + html;
     $('#view').innerHTML = html;
     mountCharts(rows, isEvent);
@@ -769,10 +787,11 @@
     for (const r of state.all) { if (!perPerson.has(r.personKey)) perPerson.set(r.personKey, new Set()); perPerson.get(r.personKey).add(r.event); }
     const repeat = [...perPerson.values()].filter(s => s.size >= 2).length;
     const span = n ? Math.max(1, Math.round((startOfDay(new Date()) - startOfDay(rows[0].ts)) / DAY) + 1) : 1;
-    let html = sessionCards(state.all, rows, true);
-    html += headKpis(rows, `${fmt(people.size)} người duy nhất${repeat ? ` · ${fmt(repeat)} người đi ≥ 2 sự kiện` : ''}`, span, costKpi(state.all, false));
-    html += aiSummaryBox('__overview__') + insightsBox(rows, 'overview');
-    // event comparison table
+    return sessionCards(state.all, rows, true)
+      + headKpis(rows, `${fmt(people.size)} người duy nhất${repeat ? ` · ${fmt(repeat)} người đi ≥ 2 sự kiện` : ''}`, span, costKpi(state.all, false));
+  }
+
+  function compareTable() {
     const trs = state.events.map(ev => {
       const er = filterRows(state.byEvent.get(ev));
       const { start } = eventDates(state.byEvent.get(ev));
@@ -796,12 +815,11 @@
         <td>${tSrc ? esc(tSrc[0]) : '—'}</td>
       </tr>`;
     }).join('');
-    html += section('★', 'So sánh các sự kiện', 'Bấm vào một dòng để mở dashboard riêng của sự kiện đó',
+    return section('', 'So sánh các sự kiện', 'Bấm vào một dòng để mở dashboard riêng của sự kiện đó',
       `<div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr>
         <th>Sự kiện</th><th>Buổi đầu tiên</th><th class="n">Còn lại</th><th class="n">Đăng ký</th><th class="n">24h</th><th class="n">TB/ngày</th>
         <th class="n">% quản lý</th><th class="n">Consent</th><th>Lĩnh vực #1</th><th>Bận tâm #1</th><th>Kênh #1</th>
       </tr></thead><tbody>${trs}</tbody></table></div></div>`);
-    return html;
   }
 
   function eventHeader(rows, base) {
@@ -809,9 +827,31 @@
     const { start } = eventDates(base);
     const span = n ? Math.max(1, Math.round((startOfDay(new Date(Math.min(Date.now(), start ? +start : Date.now()))) - startOfDay(rows[0].ts)) / DAY) + 1) : 1;
     const dup = duplicates(rows);
-    let html = sessionCards(base, rows, false);
-    html += headKpis(rows, dup ? `${fmt(n - dup)} người · gộp ${fmt(dup)} lượt trùng` : 'Không có lượt trùng', span, costKpi(base, true));
-    return html + aiSummaryBox(state.route.event) + insightsBox(rows, 'event');
+    return sessionCards(base, rows, false)
+      + headKpis(rows, dup ? `${fmt(n - dup)} người · gộp ${fmt(dup)} lượt trùng` : 'Không có lượt trùng', span, costKpi(base, true));
+  }
+
+  // Biểu đồ đăng ký theo ngày + kênh / mối bận tâm hàng đầu — phần "nhìn nhanh" của tab Tổng quan
+  function dailyLegend(rows, isEvent) {
+    if (!isEvent) return state.events.map(ev => ({ label: eventTitle(ev), color: state.eventColor.get(ev) }));
+    const order = [...state.sourceColor.keys()];
+    return toItems(countBy(rows, r => r.source || UNKNOWN)).map(i => i.label).sort((a, b) => order.indexOf(a) - order.indexOf(b))
+      .map(g => ({ label: g, color: state.sourceColor.get(g) || '--c-other' }));
+  }
+
+  function quickGrid(rows, isEvent) {
+    const n = rows.length;
+    const withQ = rows.filter(r => !r.noConcern);
+    const srcItems = toItems(countBy(rows, r => r.source)).slice(0, 5);
+    const themeItems = toItems(countBy(withQ, r => r.themes)).filter(i => i.label !== 'other').slice(0, 5).map(i => ({ ...i, key: i.label, label: themeLabel(i.label) }));
+    const goTo = (sub, text) => `<a class="card-link" href="${routeHash(state.route, sub)}">${text} →</a>`;
+    return `<div class="grid g-7-5 quick">
+      ${card('Đăng ký theo ngày', isEvent ? `Chia theo kênh · ${hoverWord} vào cột để xem luỹ kế` : 'Chia theo sự kiện', legend(dailyLegend(rows, isEvent)) + '<div class="chart-box"><canvas id="chDaily"></canvas></div>')}
+      <div class="col-stack">
+        ${card('Kênh mang về đăng ký', '', barList(srcItems, { total: n, limit: 99, colorFn: i => state.sourceColor.get(i.label) || '--c-other' }) + goTo('marketing', 'Chi tiết kênh & quảng cáo'))}
+        ${card('Mối bận tâm hàng đầu', `${withQ.length}/${n} người có câu hỏi cụ thể`, barList(themeItems, { total: withQ.length, limit: 99, click: 'theme-id', colorFn: i => themeColor(i.key) }) + goTo('questions', 'Xem câu hỏi'))}
+      </div>
+    </div>`;
   }
 
   const MODEL_NAMES = { 'anthropic/claude-haiku-5.5': 'Claude Haiku 5.5', 'anthropic/claude-sonnet-5.5': 'Claude Sonnet 5.5', 'google/gemma-4-26b-a4b-it': 'Gemma 4' };
@@ -837,40 +877,35 @@
     </div>`;
   }
 
-  function insightsBox(rows, scope) {
+  // Tab Tổng quan: 1 khung nhận định — tiêu đề AI + việc nên làm, số liệu nhanh thu gọn bên dưới
+  function insightPanel(rows, scope) {
     const ins = buildInsights(rows, scope);
-    if (!ins.length) return '';
-    const hasAi = !!(state.summaries && state.summaries[scope === 'event' ? state.route.event : '__overview__']);
-    const list = `<ul>${ins.map(i => `<li class="${i.warn ? 'warn' : ''}">${i.html}</li>`).join('')}</ul>`;
-    if (hasAi) return `<div class="insights"><details class="more-box"${isNarrow() ? '' : ' open'}><summary class="ins-sum">📊 Số liệu nhanh (cập nhật liên tục) · ${ins.length} ý</summary>${list}</details></div>`;
-    return `<div class="insights"><h3>💡 Đọc nhanh: họ là ai, đến từ đâu, đang lo gì?</h3>${list}</div>`;
+    const list = ins.length ? `<ul class="ins-list">${ins.map(i => `<li class="${i.warn ? 'warn' : ''}">${i.html}</li>`).join('')}</ul>` : '';
+    const s = state.summaries && state.summaries[scope === 'event' ? state.route.event : '__overview__'];
+    if (!s || !s.headline) return list ? `<div class="insights"><h3>Nhận định nhanh</h3>${list}</div>` : '';
+    const at = s.generatedAt ? new Date(s.generatedAt) : null;
+    const when = at && !isNaN(at) ? `${pad(at.getHours())}:${pad(at.getMinutes())} ${dayLabel(at)}` : '';
+    const li = arr => (arr || []).map(x => `<li>${esc(x)}</li>`).join('');
+    return `<div class="ai-sum">
+      <div class="ai-head"><span class="ai-badge">Tóm tắt AI hằng ngày</span><span class="ai-meta">${when ? `viết lúc ${when}` : ''}</span>
+        <a class="card-link ai-more" href="${routeHash(state.route, 'questions')}">Phân tích đầy đủ →</a></div>
+      <p class="ai-headline">${esc(s.headline)}</p>
+      ${(s.actions || []).length || (s.watch || []).length ? `<div class="ai-grid ai-grid-2">
+        <div>${(s.actions || []).length ? `<h4>Nên làm hôm nay</h4><ul class="ai-act">${li(s.actions)}</ul>` : ''}</div>
+        <div>${(s.watch || []).length ? `<h4>Cần để ý</h4><ul class="ai-watch">${li(s.watch)}</ul>` : ''}</div>
+      </div>` : ''}
+      ${list ? `<details class="quick-facts"><summary>Số liệu nhanh · ${ins.length} ý, cập nhật liên tục</summary>${list}</details>` : ''}
+    </div>`;
   }
 
   function sectionMomentum(rows, isEvent) {
-    const groups = isEvent ? toItems(countBy(rows, r => r.source || UNKNOWN)).map(i => i.label).sort((a, b) => [...state.sourceColor.keys()].indexOf(a) - [...state.sourceColor.keys()].indexOf(b)) : state.events;
-    const leg = isEvent ? groups.map(g => ({ label: g, color: state.sourceColor.get(g) || '--c-other' })) : groups.map(ev => ({ label: eventTitle(ev), color: state.eventColor.get(ev) }));
-    const sessKey = r => (r.session.label ? (isEvent ? r.session.label : `${eventTitle(r.event)} · ${r.session.label}`) : UNKNOWN);
-    const sessionItems = toItems(countBy(rows, sessKey)).map(i => {
-      const s = rows.find(r => sessKey(r) === i.label);
-      const d = s && s.session.date;
-      return {
-        ...i,
-        date: d,
-        label: d ? `${DOW[d.getDay()]} ${dayLabel(d)}/${d.getFullYear()} · ${s.session.time}` : i.label,
-        sub: isEvent || !s ? '' : eventTitle(s.event),
-      };
-    }).sort((a, b) => (a.date ? +a.date : Infinity) - (b.date ? +b.date : Infinity));
-    let body = `<div class="grid g-7-5">
-      ${card('Số lượng đăng ký theo ngày', isEvent ? `Chia theo kênh (utm_source) · ${hoverWord} vào cột để xem luỹ kế` : 'Chia theo sự kiện', legend(leg) + '<div class="chart-box"><canvas id="chDaily"></canvas></div>')}
+    const body = `<div class="grid g2">
       ${isEvent
-        ? card('Đăng ký luỹ kế', 'Tổng số người đã đăng ký theo thời gian', '<div class="chart-box" style="margin-top:28px"><canvas id="chCum"></canvas></div>')
-        : card('Tốc độ đăng ký giữa các sự kiện', 'Luỹ kế theo số ngày trước buổi đầu tiên — so sánh sự kiện nào “nóng” hơn', legend(leg) + '<div class="chart-box"><canvas id="chPace"></canvas></div>')}
-    </div>
-    <div class="grid g-7-5" style="margin-top:16px">
-      ${card('Heatmap giờ đăng ký', 'Ngày trong tuần × giờ trong ngày — biết lúc nào khán giả online để đăng bài, gửi nhắc', heatmap(rows))}
-      ${card('Khung giờ / buổi được chọn', 'Buổi học viên chọn tham gia · xếp theo ngày diễn ra', barList(sessionItems, { total: rows.length, limit: 20, subFn: i => i.sub }))}
+        ? card('Đăng ký luỹ kế', 'Tổng số người đã đăng ký theo thời gian', '<div class="chart-box"><canvas id="chCum"></canvas></div>')
+        : card('Tốc độ đăng ký giữa các sự kiện', 'Luỹ kế theo số ngày trước buổi đầu tiên — sự kiện nào “nóng” hơn', legend(dailyLegend(rows, false)) + '<div class="chart-box"><canvas id="chPace"></canvas></div>')}
+      ${card('Giờ vàng đăng ký', 'Ngày trong tuần × giờ — lúc khán giả online để đăng bài, gửi nhắc', heatmap(rows))}
     </div>`;
-    return section(1, 'Nhịp đăng ký', 'Đăng ký đến lúc nào, từ ngày nào, chọn buổi nào', body);
+    return section('', 'Nhịp đăng ký', 'Tốc độ tích luỹ và khung giờ học viên hay đăng ký', body);
   }
 
   function sectionSource(rows) {
@@ -889,18 +924,15 @@
         <td class="n" data-label="Có câu hỏi cụ thể">${pct(g.filter(r => !r.noConcern).length, g.length)}%</td>
         <td class="n" data-label="Consent">${pct(g.filter(r => r.consent === 'yes').length, g.length)}%</td></tr>`;
     }).join('');
-    const C = CFG.columns;
-    const cityCard = C.city != null
-      ? card('Tỉnh / Thành phố', '', barList(toItems(countBy(rows, r => r.city)), { total: n }))
-      : card('Vị trí địa lý', 'Form hiện chưa hỏi Tỉnh/Thành phố', `<div class="note">Muốn biết học viên ở <b>tỉnh/thành nào</b> (để chọn giờ, chọn online/offline, chạy quảng cáo theo vùng): thêm trường <b>“Tỉnh/Thành phố đang sống & làm việc”</b> (dạng chọn) vào form LadiPage, rồi khai báo cột đó ở <b>config.js → columns.city</b>. Dashboard sẽ tự hiện biểu đồ.</div>`);
-    const body = `<div class="grid g3">
+    const cityCard = CFG.columns.city != null ? card('Tỉnh / Thành phố', '', barList(toItems(countBy(rows, r => r.city)), { total: n })) : '';
+    const body = `<div class="grid ${cityCard ? 'g3' : 'g2'}">
       ${card('Kênh (utm_source)', 'Học viên biết đến sự kiện từ đâu', barList(srcItems, { total: n, colorFn: i => state.sourceColor.get(i.label) || '--c-other' }))}
       ${card('Chiến dịch (utm_campaign)', 'Bài đăng / chiến dịch cụ thể mang về đăng ký', barList(campItems, { total: n, subFn: i => i.src ? `qua ${i.src}` : '' }))}
       ${cityCard}
-      <div class="card span2" style="grid-column:1/-1"><h3>Chất lượng theo kênh</h3><p class="hint">Kênh nào mang về đúng chân dung mục tiêu (người đang quản lý, có kinh nghiệm, có vấn đề cụ thể)?</p>
+      <div class="card" style="grid-column:1/-1"><h3>Chất lượng theo kênh</h3><p class="hint">Kênh nào mang về đúng chân dung mục tiêu: đang quản lý, có kinh nghiệm, có vấn đề cụ thể</p>
         <div class="tbl-wrap"><table class="tbl tbl-cards"><thead><tr><th>Kênh</th><th class="n">Đăng ký</th><th class="n">Tỉ trọng</th><th class="n">% đang quản lý</th><th class="n">% KN quản lý > 3 năm</th><th class="n">% có câu hỏi cụ thể</th><th class="n">% consent</th></tr></thead><tbody>${quality}</tbody></table></div></div>
     </div>`;
-    return section(2, 'Họ đến từ đâu', 'Kênh, chiến dịch và chất lượng người đăng ký theo từng kênh', body);
+    return section('', 'Kênh & chiến dịch', 'Học viên đến từ đâu và kênh nào mang về đúng người', body);
   }
 
   const adsMoney = v => (state.ads && state.ads.currency && state.ads.currency !== 'USD'
@@ -943,10 +975,10 @@
   function sectionAds(base, isEvent) {
     const desc = 'Chi tiêu, lead và chi phí trên mỗi đăng ký — lấy từ tab “Facebook Ads” trong Sheet';
     if (!state.ads) {
-      return section(3, 'Quảng cáo Facebook', desc, card('Chưa có dữ liệu quảng cáo', '', `<div class="note">Dashboard chưa nhận được tab <b>“${esc(adsCfg().sheetName)}”</b>. Dán <b>Code.gs</b> bản mới (có hàm <b>readAdsSheet_</b>) vào Apps Script rồi deploy bản mới — xem mục “Chi phí quảng cáo” trong HUONG-DAN.md.</div>`));
+      return section('', 'Quảng cáo Facebook', desc, card('Chưa có dữ liệu quảng cáo', '', `<div class="note">Dashboard chưa nhận được tab <b>“${esc(adsCfg().sheetName)}”</b>. Dán <b>Code.gs</b> bản mới (có hàm <b>readAdsSheet_</b>) vào Apps Script rồi deploy bản mới — xem mục “Chi phí quảng cáo” trong HUONG-DAN.md.</div>`));
     }
     const ads = adsOf(isEvent);
-    if (!ads.length) return section(3, 'Quảng cáo Facebook', desc, card('Chưa có quảng cáo cho sự kiện này', '', `<div class="note">Tab “${esc(adsCfg().sheetName)}” chưa có chiến dịch nào có tên chứa “${esc(state.route.event)}”. Nếu tên chiến dịch đặt khác, khai báo trong <b>config.js → ads.eventOf</b>.</div>`));
+    if (!ads.length) return section('', 'Quảng cáo Facebook', desc, card('Chưa có quảng cáo cho sự kiện này', '', `<div class="note">Tab “${esc(adsCfg().sheetName)}” chưa có chiến dịch nào có tên chứa “${esc(state.route.event)}”. Nếu tên chiến dịch đặt khác, khai báo trong <b>config.js → ads.eventOf</b>.</div>`));
 
     const { spend, leads, leadAds, clicks, impr, regs, utms, period } = adsStats(base, ads);
     const fx = adsCfg().fxRate;
@@ -997,38 +1029,43 @@
         ${card('Theo mẫu quảng cáo (nội dung)', 'Gộp cùng một mẫu chạy ở nhiều nhóm · chỉ tính chiến dịch ra lead', table(group(leadAds, a => a.ad), 'Mẫu quảng cáo', 'Lead'))}
       </div>
       <div class="note">${note}</div>`;
-    return section(3, 'Quảng cáo Facebook', desc, body);
+    return section('', 'Quảng cáo Facebook', desc, body);
   }
 
-  function sectionWho(rows) {
+  function peopleTab(rows, isEvent) {
     const n = rows.length;
     const order = CFG.order;
     const expItems = toItems(countBy(rows, r => r.mgmtExp), order.mgmtExp);
     const teamItems = toItems(countBy(rows, r => r.teamSize), order.teamSize);
-    const body = `<div class="grid g2">
-      ${card('Vị trí / cấp bậc', 'Vai trò hiện tại trong tổ chức', barList(toItems(countBy(rows, r => r.position)), { total: n }))}
-      ${card('Độ tuổi (theo năm sinh)', 'Nhóm năm sinh của học viên', barList(toItems(countBy(rows, r => r.cohort), COHORTS), { total: n, subFn: i => cohortSub(i.label) }))}
-      ${card('Số năm kinh nghiệm quản lý', 'Đã làm quản lý bao lâu', barList(expItems, { total: n }))}
-      ${card('Quy mô đội đang quản lý', 'Số người đang trực tiếp phụ trách', barList(teamItems, { total: n }))}
-      ${card('Ma trận: Kinh nghiệm quản lý × Quy mô đội', 'Ô đậm = nhóm đông nhất. Góc trên-trái là “quản lý mới, đội nhỏ”; góc dưới-phải là “quản lý lâu năm, đội lớn”.',
-        matrix(expItems.map(i => ({ label: i.label })), teamItems.map(i => ({ label: i.label })), (e, t) => rows.filter(r => (r.mgmtExp || UNKNOWN) === e && (r.teamSize || UNKNOWN) === t).length), 'span2')}
-    </div>`;
-    return section(4, 'Họ là ai', 'Cấp bậc, độ tuổi, kinh nghiệm và quy mô đội nhóm', body);
-  }
+    const mini = (title, items, opts = {}) => `<div class="mini-block"><h4>${title}</h4>${barList(items, { total: n, ...opts })}</div>`;
+    const portrait = `<div class="card"><div class="grid g2 inner">
+      ${mini('Vị trí / cấp bậc', toItems(countBy(rows, r => r.position)))}
+      ${mini('Độ tuổi (theo năm sinh)', toItems(countBy(rows, r => r.cohort), COHORTS), { subFn: i => cohortSub(i.label) })}
+      ${mini('Kinh nghiệm quản lý', expItems)}
+      ${mini('Quy mô đội đang quản lý', teamItems)}
+    </div></div>`;
 
-  function sectionWork(rows) {
-    const n = rows.length;
-    const posXind = toItems(countBy(rows, r => r.industries)).filter(i => i.label !== UNKNOWN).slice(0, 8);
-    const positions = toItems(countBy(rows, r => r.position));
     const nInd = rows.filter(r => r.industryByAi).length;
     const indHint = nInd
-      ? `🤖 AI đã xếp ${nInd}/${rows.length} người vào nhóm ngành chuẩn${nInd < rows.length ? ' · số còn lại đang chờ AI, tạm gộp theo cách viết' : ''} · ${hoverWord} vào nhãn ngành ở câu hỏi để xem học viên tự ghi gì`
-      : 'Đã gộp các cách viết khác nhau (vd. “Giáo dục ” và “giáo dục”). Một người có thể thuộc nhiều lĩnh vực.';
-    const body = `<div class="grid g-7-5">
-      ${card('Lĩnh vực đang hoạt động', indHint, barList(toItems(countBy(rows, r => r.industries)), { total: n, limit: 14 }))}
-      ${card('Lĩnh vực × Vị trí', 'Top lĩnh vực theo cấp bậc', matrix(posXind.map(i => ({ label: i.label })), positions.map(i => ({ label: i.label })), (ind, pos) => rows.filter(r => r.industries.includes(ind) && (r.position || UNKNOWN) === pos).length))}
+      ? `AI đã xếp ${nInd}/${n} người vào nhóm ngành chuẩn${nInd < n ? ' · số còn lại tạm gộp theo cách viết' : ''}`
+      : 'Đã gộp các cách viết khác nhau. Một người có thể thuộc nhiều lĩnh vực.';
+    const topInd = toItems(countBy(rows, r => r.industries)).filter(i => i.label !== UNKNOWN).slice(0, 8);
+    const positions = toItems(countBy(rows, r => r.position));
+    const matrices = {
+      expTeam: { label: 'Kinh nghiệm quản lý × Quy mô đội', hint: 'Góc trên-trái: quản lý mới, đội nhỏ · góc dưới-phải: quản lý lâu năm, đội lớn',
+        html: () => matrix(expItems.map(i => ({ label: i.label })), teamItems.map(i => ({ label: i.label })), (e, t) => rows.filter(r => (r.mgmtExp || UNKNOWN) === e && (r.teamSize || UNKNOWN) === t).length) },
+      indPos: { label: 'Lĩnh vực × Vị trí', hint: 'Top 8 lĩnh vực theo cấp bậc',
+        html: () => matrix(topInd.map(i => ({ label: i.label })), positions.map(i => ({ label: i.label })), (ind, pos) => rows.filter(r => r.industries.includes(ind) && (r.position || UNKNOWN) === pos).length) },
+    };
+    const m = matrices[state.peopleMatrix] || matrices.expTeam;
+    const body = `<div class="grid g2">
+      ${card('Lĩnh vực đang hoạt động', indHint, barList(toItems(countBy(rows, r => r.industries)), { total: n, limit: 12 }))}
+      <div class="card"><div class="card-head"><div><h3>Tương quan</h3><p class="hint">${m.hint} · ô đậm = nhóm đông nhất</p></div>
+        <select data-pmatrix aria-label="Chọn ma trận">${Object.entries(matrices).map(([k, x]) => `<option value="${k}"${x === m ? ' selected' : ''}>${x.label}</option>`).join('')}</select></div>${m.html()}</div>
     </div>`;
-    return section(5, 'Họ đang làm gì', 'Ngành nghề và cấp bậc theo từng ngành', body);
+    return section('', 'Chân dung học viên', 'Cấp bậc, độ tuổi, kinh nghiệm và quy mô đội đang quản lý', portrait)
+      + section('', 'Ngành nghề & tương quan', 'Học viên làm ở đâu và các nhóm giao nhau thế nào', body)
+      + sectionOps(rows, isEvent);
   }
 
   function sectionConcerns(rows) {
@@ -1075,7 +1112,7 @@
         <label class="hint" style="margin:0">Xem theo&nbsp;<select data-matrix>${Object.entries(dims).map(([k, d]) => `<option value="${k}"${k === state.matrixDim ? ' selected' : ''}>${d.label}</option>`).join('')}</select></label></div>${mx}</div>
       <div class="card span2" id="questions">${questionsBlock(rows)}</div>
     </div>`;
-    return section(6, 'Họ bận tâm điều gì', 'Phân tích câu hỏi / khó khăn học viên gửi về', body);
+    return section('', 'Họ bận tâm điều gì', 'Phân loại câu hỏi / khó khăn học viên gửi về', body);
   }
 
   const qStep = () => (isNarrow() ? 5 : 10);
@@ -1133,21 +1170,20 @@
       <li><span>Thiếu utm_campaign</span><b>${noCamp}</b></li>
       <li><span>Câu hỏi trống / “chưa có”</span><b>${rows.filter(r => r.noConcern).length}</b></li>
     </ul><div class="note">Mẹo: dùng link có <b>utm_campaign</b> riêng cho từng bài đăng / nhóm Zalo / email để biết chính xác bài nào hiệu quả.</div>`;
-    return section(7, 'Consent & chất lượng dữ liệu', isEvent ? '' : 'Toàn chuỗi', `<div class="grid g2">${card('Tình trạng consent form', '', consentBody)}${card('Chất lượng dữ liệu', 'Các điểm cần làm sạch trước khi gửi email / chia nhóm', dq)}</div>`);
+    return section('', 'Consent & chất lượng dữ liệu', isEvent ? '' : 'Toàn chuỗi', `<div class="grid g2">${card('Tình trạng consent form', '', consentBody)}${card('Chất lượng dữ liệu', 'Các điểm cần làm sạch trước khi gửi email / chia nhóm', dq)}</div>`);
   }
 
   function mountCharts(rows, isEvent) {
     if (!rows.length || !window.Chart) return;
-    const daily = $('#chDaily');
-    if (isEvent) {
-      const { start } = eventDates(state.byEvent.get(state.route.event));
-      const groups = [...state.sourceColor.keys()].filter(s => rows.some(r => (r.source || UNKNOWN) === s));
-      dailyStacked(daily, rows, r => r.source || UNKNOWN, groups, g => state.sourceColor.get(g) || '--c-other', start);
-      cumulativeLine($('#chCum'), rows, start);
-    } else {
-      dailyStacked(daily, rows, r => r.event, state.events, ev => state.eventColor.get(ev), null);
-      paceChart($('#chPace'));
+    const start = isEvent ? eventDates(state.byEvent.get(state.route.event)).start : null;
+    if ($('#chDaily')) {
+      if (isEvent) {
+        const groups = [...state.sourceColor.keys()].filter(s => rows.some(r => (r.source || UNKNOWN) === s));
+        dailyStacked($('#chDaily'), rows, r => r.source || UNKNOWN, groups, g => state.sourceColor.get(g) || '--c-other', start);
+      } else dailyStacked($('#chDaily'), rows, r => r.event, state.events, ev => state.eventColor.get(ev), null);
     }
+    if ($('#chCum')) cumulativeLine($('#chCum'), rows, start);
+    if ($('#chPace')) paceChart($('#chPace'));
   }
 
   /* ---------------- interactions ---------------- */
@@ -1161,6 +1197,11 @@
     const t = e.target.closest('[data-theme-id],[data-word],[data-goto],[data-clear-q]');
     if (!t) return;
     if (t.dataset.goto) { location.hash = `/event/${encodeURIComponent(t.dataset.goto)}`; return; }
+    if (t.dataset.themeId && state.route.sub !== 'questions') {   // từ tab Tổng quan → mở tab Câu hỏi đã lọc
+      state.q.theme = t.dataset.themeId; state.q.word = null; state.q.limit = 0; state.pendingQ = true;
+      location.hash = routeHash(state.route, 'questions').slice(1);
+      return;
+    }
     if (t.hasAttribute('data-clear-q')) { state.q.theme = null; state.q.word = null; rerenderKeep(false); return; }
     state.q.limit = 0;
     if (t.dataset.themeId) { state.q.theme = state.q.theme === t.dataset.themeId ? null : t.dataset.themeId; state.q.word = null; }
@@ -1170,6 +1211,7 @@
   view.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button]')) { e.preventDefault(); e.target.click(); } });
   view.addEventListener('change', e => {
     if (e.target.matches('[data-matrix]')) { state.matrixDim = e.target.value; rerenderKeep(false); }
+    if (e.target.matches('[data-pmatrix]')) { state.peopleMatrix = e.target.value; rerenderKeep(false); }
     if (e.target.id === 'hideEmpty') { state.q.hideEmpty = e.target.checked; rerenderKeep(false); }
     if (e.target.dataset.targetEv) {
       const v = parseInt(e.target.value, 10);
@@ -1184,8 +1226,16 @@
     if (e.target.closest('[data-reset-filters]')) { state.filters = freshFilters(); render(true); }
   });
   window.addEventListener('hashchange', () => {
-    state.route = readRoute(); state.filters = freshFilters(); state.q = { theme: null, word: null, hideEmpty: true, limit: 0 };
-    render(false); window.scrollTo(0, 0);
+    const prev = state.route;
+    state.route = readRoute();
+    // đổi sự kiện → làm mới bộ lọc; chỉ đổi tab con → giữ nguyên bộ lọc
+    if (prev.view !== state.route.view || prev.event !== state.route.event) {
+      state.filters = freshFilters(); state.q = { theme: null, word: null, hideEmpty: true, limit: 0 };
+    }
+    render(false);
+    if (state.pendingQ && $('#questions')) $('#questions').scrollIntoView({ block: 'start' });
+    else window.scrollTo(0, 0);
+    state.pendingQ = false;
   });
   $('#refreshBtn').addEventListener('click', () => load());
 

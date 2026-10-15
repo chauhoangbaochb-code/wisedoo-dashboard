@@ -36,18 +36,16 @@ Ghi chú:
 - Muốn tên sự kiện dễ đọc hơn: thêm vào `events` trong `config.js`, ví dụ `'Feedback': { title: 'Feedback · Phản hồi hiệu quả' }`.
 
 ## Các phần trong dashboard
-| Phần | Trả lời câu hỏi |
-|---|---|
-| Thẻ buổi học | Mỗi buổi: ngày giờ, đếm ngược, số người đăng ký, % đạt mục tiêu (sửa mục tiêu ngay trên thẻ) |
-| KPI + "Đọc nhanh" | Tổng lượt, 24 giờ / 7 ngày qua, bình quân từ ngày mở, % đang phụ trách người + nhận định tự động |
-| So sánh sự kiện (tab Tổng quan) | Sự kiện nào hút người hơn, tốc độ đăng ký, chân dung khác nhau ra sao |
-| 1. Nhịp đăng ký | Đăng ký theo ngày (theo kênh), luỹ kế, heatmap giờ × thứ, buổi được chọn |
-| 2. Họ đến từ đâu | Kênh, chiến dịch (UTM), **chất lượng theo kênh**, vị trí địa lý (khi form có trường này) |
-| 3. Quảng cáo Facebook | Đã chi, lead theo Meta, đăng ký thực từ quảng cáo, chi phí / đăng ký, hiệu quả theo chiến dịch · nhóm quảng cáo · mẫu quảng cáo |
-| 4. Họ là ai | Cấp bậc, độ tuổi, kinh nghiệm quản lý, quy mô đội, ma trận kinh nghiệm × quy mô đội |
-| 5. Họ đang làm gì | Lĩnh vực (đã gộp cách viết khác nhau), lĩnh vực × cấp bậc |
-| 6. Họ bận tâm điều gì | Nhóm vấn đề (tự phân loại), word cloud, vấn đề × kinh nghiệm/vị trí/tuổi/kênh, danh sách câu hỏi ẩn danh |
-| 7. Consent & chất lượng dữ liệu | Tỉ lệ consent, trùng lặp, thiếu dữ liệu |
+Mỗi sự kiện (và tab "Tổng quan chuỗi") có 4 tab con. Bộ lọc phía trên áp dụng cho cả 4 tab.
+
+| Tab | Dành cho | Nội dung |
+|---|---|---|
+| **Tổng quan** | Xem nhanh trong 10 giây | Thẻ buổi học (đếm ngược, % mục tiêu) · 6 chỉ số (tổng, 24 giờ, 7 ngày, bình quân, % đang quản lý, chi phí / 1 đăng ký) · tóm tắt AI + việc nên làm · đăng ký theo ngày · kênh và mối bận tâm hàng đầu · so sánh sự kiện (tab chuỗi) |
+| **Marketing** | Người chạy ads, đăng bài | Đăng ký luỹ kế, giờ vàng đăng ký · kênh, chiến dịch UTM, chất lượng theo kênh · quảng cáo Facebook (chi tiêu, lead, chi phí / đăng ký, theo chiến dịch · nhóm · mẫu quảng cáo) |
+| **Học viên** | Người làm nội dung | Chân dung (cấp bậc, tuổi, kinh nghiệm quản lý, quy mô đội) · lĩnh vực · ma trận tương quan · consent & chất lượng dữ liệu |
+| **Câu hỏi** | Giảng viên | Tóm tắt AI đầy đủ · nhóm vấn đề, từ khoá, vấn đề × nhóm người · danh sách câu hỏi ẩn danh |
+
+Link có thể trỏ thẳng tới một tab, ví dụ `#/event/Delegation/marketing`.
 
 ## Chi phí quảng cáo (tab "Facebook Ads")
 1. **Cài một lần:** `Code.gs` phải có hàm `readAdsSheet_` và dòng `ads: readAdsSheet_(ss),` trong `doGet` (bản từ 15/10/2026 đã có sẵn). Dán bản mới vào Apps Script → **Deploy → Manage deployments → Edit → Version: New version**.
