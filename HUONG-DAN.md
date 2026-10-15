@@ -50,7 +50,7 @@ Ghi chú:
 | 7. Consent & chất lượng dữ liệu | Tỉ lệ consent, trùng lặp, thiếu dữ liệu |
 
 ## Chi phí quảng cáo (tab "Facebook Ads")
-1. **Cài một lần:** làm theo 3 bước ở đầu file `apps-script/Ads.gs` (thêm file Ads, thêm dòng `ads: readAdsSheet_(),` vào doGet, deploy bản mới).
+1. **Cài một lần:** `Code.gs` phải có hàm `readAdsSheet_` và dòng `ads: readAdsSheet_(ss),` trong `doGet` (bản từ 15/10/2026 đã có sẵn). Dán bản mới vào Apps Script → **Deploy → Manage deployments → Edit → Version: New version**.
 2. **Cập nhật số liệu:** Trình quản lý quảng cáo → chọn khoảng ngày → Xuất bảng → dán đè vào tab "Facebook Ads" (giữ nguyên dòng tiêu đề). Dashboard tự nhận trong vòng 1 phút.
 3. **Ghép quảng cáo với sự kiện:** chiến dịch có tên chứa tên sự kiện (vd. `MCDelegation_Leads_Web` → Delegation) được tự gắn. Đặt tên khác → khai báo ở `config.js → ads.eventOf`.
 4. **Đăng ký thực từ quảng cáo:** đếm người có `utm_source=facebook` và `utm_campaign` nằm trong tên chiến dịch (vd. `mc_delegation`). Nên điền ở phần URL parameters của quảng cáo: `utm_source=facebook&utm_campaign=mc_delegation`.

@@ -905,7 +905,7 @@
   function sectionAds(base, isEvent) {
     const desc = 'Chi tiêu, lead và chi phí trên mỗi đăng ký — lấy từ tab “Facebook Ads” trong Sheet';
     if (!state.ads) {
-      return section(3, 'Quảng cáo Facebook', desc, card('Chưa có dữ liệu quảng cáo', '', `<div class="note">Dashboard chưa nhận được tab <b>“${esc(adsCfg().sheetName)}”</b>. Thêm file <b>apps-script/Ads.gs</b> vào Apps Script, sửa 1 dòng trong <b>doGet</b> rồi deploy bản mới — xem mục “Chi phí quảng cáo” trong HUONG-DAN.md.</div>`));
+      return section(3, 'Quảng cáo Facebook', desc, card('Chưa có dữ liệu quảng cáo', '', `<div class="note">Dashboard chưa nhận được tab <b>“${esc(adsCfg().sheetName)}”</b>. Dán <b>Code.gs</b> bản mới (có hàm <b>readAdsSheet_</b>) vào Apps Script rồi deploy bản mới — xem mục “Chi phí quảng cáo” trong HUONG-DAN.md.</div>`));
     }
     const ads = state.ads.rows.filter(a => !isEvent || adEvent(a) === state.route.event);
     if (!ads.length) return section(3, 'Quảng cáo Facebook', desc, card('Chưa có quảng cáo cho sự kiện này', '', `<div class="note">Tab “${esc(adsCfg().sheetName)}” chưa có chiến dịch nào có tên chứa “${esc(state.route.event)}”. Nếu tên chiến dịch đặt khác, khai báo trong <b>config.js → ads.eventOf</b>.</div>`));
