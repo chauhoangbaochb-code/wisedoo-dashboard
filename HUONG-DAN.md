@@ -23,7 +23,7 @@ Ghi chú:
 - Câu nào AI chưa xử lý (đang chờ, lỗi) → dashboard tạm phân loại theo từ khoá.
 - Muốn phân loại lại 1 câu: xoá dòng của câu đó trong tab "AI", lần chạy sau sẽ làm lại.
 - Đổi nhóm vấn đề: sửa **cả** `THEMES` trong Code.gs **và** `themes` trong config.js (giữ cùng `id`).
-- Đổi danh sách nhóm ngành: sửa `INDUSTRIES` trong Code.gs.
+- Đổi danh sách nhóm ngành: sửa `INDUSTRIES` trong Code.gs. Sau khi sửa danh sách ngành hoặc prompt: chọn hàm **`reclassifyOtherIndustries`** → **Run** để AI xếp lại các lượt đang ở nhóm "Khác".
 - Mô tả sự kiện mới cho AI tóm tắt sát hơn: thêm vào `EVENT_INFO` trong Code.gs.
 - Muốn viết lại tóm tắt ngay (không chờ 7h sáng): chọn hàm **`generateSummaries`** → **Run**.
 - Tóm tắt AI chỉ dùng số liệu do script tính sẵn; trích dẫn của học viên được kiểm tra khớp nguyên văn, không khớp thì bị loại.
