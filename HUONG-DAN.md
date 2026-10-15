@@ -22,6 +22,8 @@ Ghi chú:
 - Chỉ gửi **nội dung câu hỏi** — không gửi tên, email, SĐT. Mặc định gửi câu hỏi của tất cả học viên (báo cáo nội bộ); muốn chỉ gửi người đã consent → đặt `AI_REQUIRE_CONSENT = true` trong Code.gs.
 - Câu nào AI chưa xử lý (đang chờ, lỗi) → dashboard tạm phân loại theo từ khoá.
 - Muốn phân loại lại 1 câu: xoá dòng của câu đó trong tab "AI", lần chạy sau sẽ làm lại.
+- Muốn phân loại lại **toàn bộ** theo prompt mới: chọn hàm **`reclassifyAll`** → **Run** (xoá tab "AI" rồi làm lại; quá 100 câu thì lịch 15 phút/lần làm tiếp).
+- Câu không nêu khó khăn cụ thể ("chưa có", "cần suy nghĩ thêm"…) được AI gắn nhóm `none` → dashboard tính vào nhóm "chưa nêu khó khăn", không lẫn vào biểu đồ vấn đề.
 - Đổi nhóm vấn đề: sửa **cả** `THEMES` trong Code.gs **và** `themes` trong config.js (giữ cùng `id`).
 - Đổi danh sách nhóm ngành: sửa `INDUSTRIES` trong Code.gs. Sau khi sửa danh sách ngành hoặc prompt: chọn hàm **`reclassifyOtherIndustries`** → **Run** để AI xếp lại các lượt đang ở nhóm "Khác".
 - Mô tả sự kiện mới cho AI tóm tắt sát hơn: thêm vào `EVENT_INFO` trong Code.gs.

@@ -150,9 +150,10 @@
     const session = parseSession(g('session'));
     const email = g('email').toLowerCase();
     const phone = g('phone').replace(/\D/g, '').replace(/^84/, '').replace(/^0/, '');
-    const noConcern = isNoConcern(question);
-    const validIds = CFG.themes.map(t => t.id).concat('other');
+    const validIds = CFG.themes.map(t => t.id).concat('other', 'none');
     const aiThemes = g('aiThemes').split(',').map(x => x.trim()).filter(x => validIds.includes(x));
+    // AI gắn "none" = câu không nêu khó khăn cụ thể (bắt được cả kiểu "chua co gi", "có rất nhiều")
+    const noConcern = isNoConcern(question) || aiThemes.includes('none');
     const aiKeywords = g('aiKeywords').split(';').map(x => x.trim().toLowerCase()).filter(Boolean);
     const byAi = !noConcern && aiThemes.length > 0;
     return {
