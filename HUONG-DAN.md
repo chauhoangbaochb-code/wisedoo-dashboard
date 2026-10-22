@@ -34,7 +34,9 @@ Ghi chú:
 
 ## Thêm sự kiện mới
 - Sự kiện mới đổ vào **cùng tab LadiFlow**: không cần làm gì. Dashboard tự tạo tab mới theo giá trị cột B (tên sự kiện).
-- Sự kiện mới nằm ở **tab khác** trong Sheet: mở `config.js`, thêm `{ gid: '<gid của tab>', label: '<tên>' }` vào `sources`. (gid là số sau `#gid=` trên thanh địa chỉ khi bấm vào tab đó.)
+- Sự kiện mới nằm ở **tab khác** trong Sheet (cùng thứ tự cột như LadiFlow, vd. tab `Situational_leadership`):
+  1. Code.gs → thêm tên tab vào `SOURCE_SHEETS` (và mô tả sự kiện vào `EVENT_INFO` để AI tóm tắt sát nội dung) → Lưu → Deploy bản mới.
+  2. `config.js` → thêm `{ label: '<tên tab>' }` vào `sources` và tên hiển thị vào `events`.
 - Muốn tên sự kiện dễ đọc hơn: thêm vào `events` trong `config.js`, ví dụ `'Feedback': { title: 'Feedback · Phản hồi hiệu quả' }`.
 
 ## Các phần trong dashboard

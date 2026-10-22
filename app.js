@@ -321,7 +321,7 @@
     try {
       const results = CFG.appsScriptUrl
         ? await fetchAppsScript()
-        : await Promise.all(CFG.sources.map(async src => ({ src, rows: await fetchSource(src) })));
+        : await Promise.all(CFG.sources.filter(src => src.gid).map(async src => ({ src, rows: await fetchSource(src) })));
       const recs = [];
       let raw = '';
       for (const { src, rows } of results) {

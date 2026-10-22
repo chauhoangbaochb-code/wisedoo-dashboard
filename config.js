@@ -16,6 +16,7 @@ window.DASHBOARD_CONFIG = {
   // Một tab có thể có cột khác thứ tự: thêm khoá `columns` riêng cho tab đó.
   sources: [
     { gid: '1632411938', label: 'LadiFlow' },
+    { label: 'Situational_leadership' },   // Apps Script gửi theo tên tab; gid chỉ cần khi đọc thẳng Sheet (không qua Apps Script)
   ],
 
   // Tự làm mới dữ liệu sau mỗi N giây
@@ -63,6 +64,7 @@ window.DASHBOARD_CONFIG = {
   // `targets: { '19:30-21:00, T5 05/11/2026': 80 }` cho từng buổi (ghi đúng như cột "buổi" trong Sheet).
   events: {
     Delegation: { title: 'Delegation · Giao việc hiệu quả' },
+    'Situational Leadership': { title: 'Situational Leadership · Lãnh đạo theo tình huống' },
   },
 
   // Thứ tự chuẩn cho các câu trả lời có thứ bậc
