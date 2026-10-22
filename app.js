@@ -207,10 +207,11 @@
     try { data = await res.json(); } catch (e) { throw new Error('Apps Script không trả về JSON — kiểm tra quyền truy cập Web App là "Anyone"'); }
     state.summaries = data.summaries || {};
     state.targets = data.targets || {};
-    const adsName = keyOf(adsCfg().sheetName);
-    const adsSheet = (data.sheets || []).find(sh => keyOf(sh.name) === adsName);
-    state.ads = parseAds((data.ads && data.ads.rows) || (adsSheet && adsSheet.rows) || null);
-    return (data.sheets || []).filter(sh => sh !== adsSheet).map(sh => {
+    // Tab quảng cáo: mọi tab tên bắt đầu bằng "Facebook Ads" (vd. "Facebook Ads - Delegation")
+    const isAdsTab = sh => normKey(sh.name).startsWith(normKey(adsCfg().sheetName));
+    const adsTables = data.ads ? (data.ads.sheets || [data.ads]) : (data.sheets || []).filter(isAdsTab);
+    state.ads = mergeAds(adsTables);
+    return (data.sheets || []).filter(sh => !isAdsTab(sh)).map(sh => {
       const src = CFG.sources.find(x => String(x.gid) === String(sh.gid) || x.label === sh.name) || { label: sh.name };
       const columns = { ...(src.columns || CFG.columns) };
       if (sh.aiCols) { columns.aiThemes = sh.aiCols.themes; columns.aiKeywords = sh.aiCols.keywords; columns.aiIndustry = sh.aiCols.industry; }
@@ -239,7 +240,16 @@
   const isLeadType = t => /lead|khách hàng tiềm năng|đăng ký|registration|form/i.test(t || '');
   const isoDate = v => { const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(clean(v)); return m ? new Date(+m[1], m[2] - 1, +m[3]) : null; };
 
-  function parseAds(table) {
+  // "Facebook Ads - Delegation" → "Delegation"; tab "Facebook Ads" trơn → '' (gắn sự kiện theo tên chiến dịch)
+  const adsTabEvent = name => clean((/^[^-–:]*ads\s*[-–:]\s*(.+)$/i.exec(clean(name)) || [])[1] || '');
+
+  function mergeAds(tables) {
+    const parsed = (tables || []).map(t => parseAds(t.rows, t.event || adsTabEvent(t.name))).filter(Boolean);
+    if (!parsed.length) return null;
+    return { currency: (parsed.find(p => p.currency) || {}).currency || '', rows: parsed.flatMap(p => p.rows) };
+  }
+
+  function parseAds(table, tabEvent = '') {
     if (!Array.isArray(table) || table.length < 2) return null;
     const head = table[0].map(h => clean(h).toLowerCase());
     const idx = {};
@@ -252,13 +262,19 @@
       impressions: num(get(r, 'impressions')), clicks: num(get(r, 'clicks')), spend: num(get(r, 'spend')),
       resultType: clean(get(r, 'resultType')), results: num(get(r, 'results')),
       reportStart: isoDate(get(r, 'reportStart')), reportEnd: isoDate(get(r, 'reportEnd')),
+      tabEvent,
     }));
     return { currency: currency.toUpperCase(), rows };
   }
 
+  // Thứ tự: config.js → ads.eventOf · tên tab "Facebook Ads - <sự kiện>" · tên chiến dịch chứa tên sự kiện
   function adEvent(a) {
     const map = adsCfg().eventOf;
     if (map[a.campaign]) return map[a.campaign];
+    if (a.tabEvent) {
+      const k = normKey(a.tabEvent);
+      return state.events.find(ev => { const e = normKey(ev); return e === k || e.includes(k) || k.includes(e); }) || a.tabEvent;
+    }
     const c = normKey(a.campaign);
     return state.events.find(ev => normKey(ev).length >= 3 && c.includes(normKey(ev))) || '';
   }
@@ -1057,10 +1073,10 @@
   function sectionAds(base, isEvent) {
     const desc = 'Chi tiêu, lead và chi phí trên mỗi đăng ký — lấy từ tab “Facebook Ads” trong Sheet';
     if (!state.ads) {
-      return section('', 'Quảng cáo Facebook', desc, card('Chưa có dữ liệu quảng cáo', '', `<div class="note">Dashboard chưa nhận được tab <b>“${esc(adsCfg().sheetName)}”</b>. Dán <b>Code.gs</b> bản mới (có hàm <b>readAdsSheet_</b>) vào Apps Script rồi deploy bản mới — xem mục “Chi phí quảng cáo” trong HUONG-DAN.md.</div>`));
+      return section('', 'Quảng cáo Facebook', desc, card('Chưa có dữ liệu quảng cáo', '', `<div class="note">Dashboard chưa nhận được tab nào tên <b>“${esc(adsCfg().sheetName)} - &lt;tên sự kiện&gt;”</b>. Dán <b>Code.gs</b> bản mới (có hàm <b>readAdsSheet_</b>) vào Apps Script rồi deploy bản mới — xem mục “Chi phí quảng cáo” trong HUONG-DAN.md.</div>`));
     }
     const ads = adsOf(isEvent);
-    if (!ads.length) return section('', 'Quảng cáo Facebook', desc, card('Chưa có quảng cáo cho sự kiện này', '', `<div class="note">Tab “${esc(adsCfg().sheetName)}” chưa có chiến dịch nào có tên chứa “${esc(state.route.event)}”. Nếu tên chiến dịch đặt khác, khai báo trong <b>config.js → ads.eventOf</b>.</div>`));
+    if (!ads.length) return section('', 'Quảng cáo Facebook', desc, card('Chưa có quảng cáo cho sự kiện này', '', `<div class="note">Tạo tab <b>“${esc(adsCfg().sheetName)} - ${esc(state.route.event)}”</b> trong Sheet rồi dán bảng xuất từ Trình quản lý quảng cáo vào — dashboard tự nhận trong vòng 1 phút.</div>`));
 
     const { spend, leads, leadAds, clicks, impr, regs, utms, period } = adsStats(base, ads);
     const fx = adsCfg().fxRate;

@@ -53,10 +53,11 @@ Link có thể trỏ thẳng tới một tab, ví dụ `#/event/Delegation/marke
 
 ## Chi phí quảng cáo (tab "Facebook Ads")
 1. **Cài một lần:** `Code.gs` phải có hàm `readAdsSheet_` và dòng `ads: readAdsSheet_(ss),` trong `doGet` (bản từ 15/10/2026 đã có sẵn). Dán bản mới vào Apps Script → **Deploy → Manage deployments → Edit → Version: New version**.
-2. **Cập nhật số liệu:** Trình quản lý quảng cáo → chọn khoảng ngày → Xuất bảng → dán đè vào tab "Facebook Ads" (giữ nguyên dòng tiêu đề). Dashboard tự nhận trong vòng 1 phút.
-3. **Ghép quảng cáo với sự kiện:** chiến dịch có tên chứa tên sự kiện (vd. `MCDelegation_Leads_Web` → Delegation) được tự gắn. Đặt tên khác → khai báo ở `config.js → ads.eventOf`.
-4. **Đăng ký thực từ quảng cáo:** đếm người có `utm_source=facebook` và `utm_campaign` nằm trong tên chiến dịch (vd. `mc_delegation`). Nên điền ở phần URL parameters của quảng cáo: `utm_source=facebook&utm_campaign=mc_delegation`.
-5. Số liệu quảng cáo hiện ở mục 3 của dashboard; ai mở được dashboard đều xem được chi tiêu.
+2. **Mỗi sự kiện 1 tab**, đặt tên `Facebook Ads - <tên sự kiện>` (đúng tên ở cột B), vd. `Facebook Ads - Delegation`, `Facebook Ads - Situational Leadership`. Mọi tab bắt đầu bằng "Facebook Ads" đều được đọc — không cần sửa code khi thêm sự kiện.
+3. **Cập nhật số liệu:** Trình quản lý quảng cáo → lọc chiến dịch của sự kiện → chọn khoảng ngày → Xuất bảng → dán đè vào tab của sự kiện đó (giữ nguyên dòng tiêu đề). Dashboard tự nhận trong vòng 1 phút.
+4. **Ghép quảng cáo với sự kiện:** theo tên tab. Tab tên "Facebook Ads" trơn (không ghi sự kiện) thì theo tên chiến dịch có chứa tên sự kiện; khai báo tay ở `config.js → ads.eventOf` nếu cần.
+5. **Đăng ký thực từ quảng cáo:** đếm người có `utm_source=facebook` và `utm_campaign` nằm trong tên chiến dịch (vd. `mc_delegation`). Nên điền ở phần URL parameters của quảng cáo: `utm_source=facebook&utm_campaign=mc_delegation`.
+6. Số liệu quảng cáo hiện ở tab Marketing của dashboard; ai mở được dashboard đều xem được chi tiêu.
 
 ## Mục tiêu đăng ký cho từng buổi
 - Mặc định mỗi buổi là `defaultTarget` trong `config.js` (đang để 100).

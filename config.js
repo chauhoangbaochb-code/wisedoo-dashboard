@@ -46,11 +46,11 @@ window.DASHBOARD_CONFIG = {
   // Ô "Mục tiêu" trên dashboard ghi đè số này và lưu vào tab "MUC_TIEU" trong Sheet — cả team cùng thấy.
   defaultTarget: 100,
 
-  // Chi phí quảng cáo — đọc tab xuất từ Trình quản lý quảng cáo Meta (cần apps-script/Ads.gs).
+  // Chi phí quảng cáo — mỗi sự kiện 1 tab "Facebook Ads - <tên sự kiện>" (bảng xuất từ Trình quản lý quảng cáo).
   ads: {
-    sheetName: 'Facebook Ads',
-    // Chiến dịch tự gắn vào sự kiện khi tên chiến dịch chứa tên sự kiện (MCDelegation_… → Delegation).
-    // Đặt tên khác thì khai báo tay: { 'Ten_chien_dich': 'Delegation' }
+    sheetName: 'Facebook Ads',   // tiền tố tên tab
+    // Chiến dịch gắn vào sự kiện theo tên tab; tab "Facebook Ads" trơn thì theo tên chiến dịch chứa tên sự kiện
+    // (MCDelegation_… → Delegation). Khai báo tay khi cần: { 'Ten_chien_dich': 'Delegation' }
     eventOf: {},
     // Đăng ký "từ quảng cáo" = utm_source facebook + utm_campaign nằm trong tên chiến dịch
     // (mc_delegation ↔ MCDelegation_Leads_Web). Muốn chỉ định cứng: ['mc_delegation']
