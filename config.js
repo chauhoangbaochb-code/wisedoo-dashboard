@@ -5,7 +5,7 @@ window.DASHBOARD_CONFIG = {
   // URL Web App của Apps Script (xem apps-script/Code.gs). Khi có URL này, dashboard
   // lấy dữ liệu qua Apps Script — Sheet có thể để riêng tư, email/SĐT không bị gửi ra ngoài.
   // Để trống '' thì dashboard đọc trực tiếp Sheet (Sheet phải chia sẻ công khai).
-  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbzBJSQ4MDxTI1yR-gHxE8tAiFybb88AH1ey_5Uv_iOw5Xc07kzzaWVc7aqlCWjAXZnBHg/exec',
+  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbxlGn08LrQsBtGsjZWP9mIgKWRYgk9tSGO4vtfPQhINDzqLq_4mp4eOYUULe_IZ0_HtbA/exec',
 
   // ID của Google Sheet (phần giữa /d/ và /edit trong link) — chỉ dùng khi appsScriptUrl trống
   sheetId: '1wXDRCniU8TgHSQb-pLDs6IZV3uXpZ5ASSrUx9J4G1pI',
